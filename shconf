@@ -1,0 +1,351 @@
+#!/usr/bin/env perl
+#
+# author: Adam Marshall <adamm3992@gmail.com>
+#
+# shconfig
+# manipulate shell configuration files on a high level.
+#
+# the kitchen sink is NOT included, gents.
+
+=head1 Summary
+
+C<shconfig> helps you find, open, and backup your shell
+configuration files. this program recognizes three levels
+of access: the system level, which targets the standard 
+system-wide file locations for each supported shell; the
+user level, generally defined by a user's home directory;
+and local levels, which are directories accessible to a
+user that contain specialized shell configuration. a single 
+directory may have at most one set of configuration files
+in its top level.
+
+the primary use of this program is to open conveniently
+any one of the shell configuration files at your chosen
+level (assuming you have the privileges to do so). at the
+user and local levels it is assumed that your configuration
+will be purposefully split into up to three files:
+the state file, the aliases file, and the run 
+control file, with the latter always used. for bash, 
+these files would be, on the user and local levels, called 
+.bash_state, .bash_aliases, and .bashrc. future versions
+of C<shconfig> may allow you to configure the names and 
+locations of files at all levels, but for now the 
+program expects user-level and local-level files to use 
+names of the form I<.shellname_(state|aliases|rc)> and 
+for user-level files to appear in a user's home directory; 
+it also enforces the Linux conventions for system-wide 
+configuration files.
+
+=head1 Options
+
+there are three file selectors, -s, -a, and -r.
+since in most cases you are opening a file to
+write to it, only the first file selector given to
+C<shconfig> will be used. any others will be ignored.
+
+there are also three action selectors, -o, -l, and -c.
+-o is the default, which causes files to be opened by
+the editor. as above, only the first action selector
+given will be used.
+
+=over 4
+
+=item -S | --system
+    set the level of access to 'system'. C<shconfig> will
+    look for system-wide configuration files and may require
+    root privileges to proceed. this option does not take
+    arguments.
+
+=item -L | --local
+    set the level of access to 'local'. looks under the current
+    working directory to find configuration, and up the parent
+    hierarchy if it finds none. this option does not take 
+    arguments.
+
+=item -U | --user
+    set the level of access to 'user'. access defaults to the 
+    files owned by the user logged in, and file search will
+    proceed in the top level of $HOME. this option is active
+    by default. this option does not take arguments.
+
+=item -a | --aliases
+    select the file containing the desired shell's 
+    aliases. ignored when -S is in effect.
+
+=item --backup-config
+    archive the three files configuring your desired shell.
+    note that this will ignore any other configuration files
+    C<shconfig> does not care about. the name of the archive
+    is constructed from the name of the shell as
+    "shellname-config.tar.gz." This is identical in effect to 
+    C<backup-program --config --archive>.
+
+=item -c | --cat
+    cat the file to stdout instead of opening it with an
+    editor
+
+=item -e I<editor> | --edit-with=I<editor>
+    specify an editor to use. by default, C<shconfig> looks
+    in $EDITOR. if that is unset and no argument is supplied 
+    via C<-e> or C<--edit-with>, vim is used.
+
+=item -f I<shellname> | --for=I<shellname>
+    specify the shell program whose files you are interested
+    in viewing. by default, C<shconfig> looks in $SHELL to 
+    select the appropriate files.
+
+=item -h | --help
+    print the list of options and what they are used to do.
+
+=item -l | --list
+    print the name(s) of files containing configuration at your 
+    selected level instead of opening a file. unless a file
+    selector is explicitly supplied, print the names of all
+    the shell's configuration files at this level.
+
+=item -o | --options 
+    interactively examine and edit your shell options.
+    TODO: requires a fourth file listing explicitly set
+    shell options set with set, shopt, etc. identical to
+    C<shell-options -i>
+=item --open
+    open a file with the editor. included for completeness.
+
+=item -r | --rc
+    select the run control file of your desired shell. this
+    option is used by default.
+
+=item -s | --state
+    select the file exporting shell variables. ignored when 
+    -S is in effect.
+
+=item -v | --version
+    print the program name, author, and version information
+
+=back
+
+=head1 Examples
+
+    NB: the following examples illustrate the intended uses of 
+    C<shconfig>; do not treat them as explanations of how the 
+    program works. see the section B<Summary> for an 
+    overview of C<shconfig>; and see B<Options> for a complete
+    exlanation of the program's options and their effects on
+    its behavior.
+
+    (examples here)
+
+=head1 Notes
+    
+    Copyright 2017 (copyright symbol?) Adam Marshall <adamm3992@gmail.com>.
+    distributed under the "Buddy License". see (some location)
+    for details.
+
+    if any errors appear in this document, or one or more 
+    sections appear not to be complete and self-contained, 
+    please contact the author with your reasonable criticisms.
+
+=cut
+
+use strict;
+use warnings;
+
+use feature qw{say};
+
+use Carp;
+use File::Basename;
+use Getopt::Long;
+use Cwd;
+
+my $VERSION = '0.01';
+my @SUPPORTED_SHELLS = qw{bash zsh};
+my @EDITORS = qw{vim vi gedit nano nvim mate kate emacs};
+
+# parse arguments
+
+Getopt::Long::Configure('no_ignore_case');
+Getopt::Long::Configure('no_auto_abbrev');
+
+my $system = '';
+my $user = ''; # default
+my $local = '';
+
+my $aliases = '';
+my $states = '';
+my $run_control = ''; # default
+
+my $cat = '';
+my $open = ''; # default
+my $list = '';
+
+my $shell_program = '';
+
+my $editor = '';
+
+my $backup_config = '';
+
+my $help = '';
+my $version = '';
+
+sub is_blank {
+    
+    my $val = shift;
+
+    $val eq '';
+}
+
+sub every {
+    my $fn = shift or die "insufficient arguments";
+    my $list = shift or die "insufficient arguments";
+    
+    my $result = 1;
+
+    foreach (@$list) {
+        $result = $result && $fn->($_);    
+    }
+
+    $result;
+}
+
+GetOptions(
+    'f|for=s' => \$shell_program,
+    'e|editor=s' => \$editor,
+    'backup-config' => \$backup_config,
+    'a|aliases' => sub { if (every(\&is_blank, [$run_control, $states])) { $aliases = 1; } },
+    's|state' => sub { if (every(\&is_blank, [$run_control, $aliases])) { $states = 1; } },
+    'r|rc' => sub { if (every(\&is_blank, [$states, $aliases])) { $run_control = 1; } },
+    'S|system' => sub { if (every(\&is_blank, [$user, $local])) { $system = 1; } },
+    'U|user' => sub { if (every(\&is_blank, [$system, $local])) { $user = 1; } },
+    'L|local' => sub { if (every(\&is_blank, [$system, $user])) { $local = 1; } },
+    'c|cat' => sub { if (every(\&is_blank, [$open, $list])) { $cat = 1; } },
+    'open' => sub { if (every(\&is_blank, [$cat, $list])) { $open = 1; } },
+    'l|list' => sub { if (every(\&is_blank, [$cat, $open])) { $list = 1; } },
+    'h|help' => \$help,
+    'v|version' => \$version,
+);
+
+# help overrides all other options
+if ($help) {
+    HELP();
+    exit 1;
+}
+
+# version overrides all options except for help
+if ($version) {
+    VERSION();
+    exit 1;
+}
+
+# ensure sanity of input and environment
+
+# set editor to a default value if no arg was found
+if (is_blank $editor) {
+    $editor = $ENV{EDITOR} || 'vim';
+}
+
+# set default access level if no arg was found
+if (every(\&is_blank, [$user,$local,$system])) {
+    $user = 1;
+}
+
+# set default action if no arg was found
+if (every(\&is_blank, [$cat, $list, $open])) {
+    $open = 1;
+}
+
+# set default file if no arg was found
+if (every(\&is_blank, [$run_control, $states, $aliases])) {
+    $run_control = 1;
+}
+
+# run program
+
+do {
+
+    my($shell_prefix, $suffix, $dir);
+    my $command;
+
+    # local or user-level config files
+    if (is_blank $system) {
+
+        $shell_prefix = ".";
+        if (is_blank $shell_program) {
+
+            $shell_prefix .= basename($ENV{SHELL});
+        }
+        else {
+            
+            if (every(sub{ $_ ne $shell_program }, \@SUPPORTED_SHELLS)) {
+                die "$shell_program is not a supported shell";
+            }
+
+            $shell_prefix .= $shell_program;
+        }
+
+        $suffix = 'rc' unless is_blank $run_control;
+        $suffix = '_state' unless is_blank $states;
+        $suffix = '_aliases' unless is_blank $aliases;
+        
+        $dir = $ENV{HOME} unless is_blank $user;
+        $dir = cwd() unless is_blank $local;
+    }
+    else {
+        
+        # use system-wide settings
+    }
+    
+    if (!is_blank($open)) {
+        if (every(sub{ $_ ne $editor }, \@EDITORS)) {
+            die "$editor not a recognized editor";
+        }
+        $command = $editor;
+    }
+    elsif (!is_blank($cat)) {
+        $command = 'cat';
+    }
+    else {
+        $command = 'echo';
+    }
+
+    my $file = "${shell_prefix}${suffix}";
+
+    exec "$command $dir/$file";
+};
+
+# subroutines
+ 
+sub HELP {
+
+    my $shell_support = join ',', @SUPPORTED_SHELLS;
+    my $help_msg = <<EOM;
+manipulate shell configuration files on a high level.
+shconfig currently supports $shell_support
+
+options:
+    -S|--system: go to system level
+    -L|--local: go to local level
+    -U|--user: go to user level. *default*
+    -a|--aliases: select aliases file
+    --backup-config: archive shell configuration
+    -c|--cat: print file to stdout
+    -e|--editor: specify editor
+    -f|--for: specify shell program
+    -h|--help: print this help
+    -l|--list: list files rather than opening them
+    -o|--open: open file. *default*
+    -r|--rc: select run control file. *default*
+    -s|--state: select state file
+    -v|--version: print version information
+EOM
+
+    say $help_msg;
+
+}
+
+
+sub VERSION {
+    
+    say "you are running shconfig version $VERSION";
+}
+
+
