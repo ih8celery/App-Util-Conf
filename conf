@@ -1,0 +1,93 @@
+#!/usr/bin/env perl
+#
+# file: conf
+# author: Adam Marshall (ih8celery)
+#
+# manipulate configuration files lazily
+
+=head1 Summary
+
+C<conf> helps you find and open your configuration files using a
+simple notation to identify them called a path and a description of
+your configuration setup in JSON that can be customized by you. C<conf>
+can distinguish between "local" files, "user" files located in
+the home directory, and "system" files. C<conf> uses JSON to
+remember where files are located, which is reflected in the
+format of the path.
+
+=head1 Options
+
+search for files matching path (choose default file if none)
+
+search data structure for rest of path
+
+open correct configuration file
+
+global config:
+{
+  defaults: /* default options, will override above defaults */
+  aliases: /* pairs of paths and replacements for them */
+  expressions: /* names on paths and shell programs */
+}
+
+config.json:
+{
+  bash: {
+    rc: {
+      local: ".bashrc",
+      system: "",
+      home: "~/.bashrc"
+    },
+    var: "~/.bash_var"
+  }
+}
+
+=head1 Examples
+
+conf -l -H bash
+
+lists the bash configuration files in your home directory
+
+conf -l bash.var
+
+show the full path to the bash configuration file referred to as "var"
+
+conf bash
+
+opens default file associated with bash
+
+conf bash.rc
+
+opens the run control file for bash in your home directory
+
+=cut 
+
+use strict;
+use warnings;
+
+use feature qw{say};
+
+use File::Basename;
+use Getopt::Long;
+
+use lib "$ENV{HOME}/proj/conf";
+use Conf;
+
+Getopt::Long::Configure('no_ignore_case');
+Getopt::Long::Configure('no_auto_abbrev');
+
+GetOptions(%opts);
+
+Conf::load_app_config();
+
+my $path;
+if (scalar @ARGV) {
+  $path = shift @ARGV;
+}
+else {
+  die "error: missing path";
+}
+
+my @path_parts = split_path($path);
+
+exit run(\@path_parts, $mode, $level);
