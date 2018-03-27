@@ -90,4 +90,4 @@ else {
 
 my @path_parts = split_path($path);
 
-exit run(\@path_parts, $mode, $level);
+exit run(\@path_parts);

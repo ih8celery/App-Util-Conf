@@ -66,6 +66,9 @@ package Mode {
 our $version = '0.01';
 our $level   = Level::HOME;
 our $mode    = Mode::OPEN;
+our $alias_enabled = 0;
+our $expr_enabled  = 1;
+our $settings;
 our $editor  = $ENV{EDITOR} || 'vim';
 our $configf = "$ENV{HOME}/.confrc";
 our $confd   = "$ENV{HOME}/.conf.d";
@@ -85,30 +88,120 @@ our %opts    = (
   'v|version'   => \&VERSION,
 );
 
-# load the global config file
 sub load_app_config {
-  1;
+  if (-f $configf) {
+    $settings = Config::JSON->new($configf);
+  }
 }
 
 # evaluate aliases, split path string on '.',
 # report errors, and replace parts with expressions
 sub split_path {
-  1;
+  my $path = shift;
+
+  if ($alias_enabled) {
+    eval_alias(\$path);
+  }
+
+  my @parts = split '.', $path;
+  if ($expr_enabled) {
+    for my $part ($parts) {
+      eval_expr(\$part);
+    }
+  }
+
+  return @parts;
 }
 
 # replace a substring with alias, if defined 
 sub eval_alias {
-  1;
+  my $pathr = shift;
+
+  my $aliases = $settings->get("aliases");
+  for my($k, $v) (each %{$aliases}) {
+    $$pathr =~ s/$k/$v/;
+  }
 }
 
 # replace string with result of evaluating an expression
 sub eval_expr {
- 1;
+  my $partr = shift;
+
+  my $expr = $settings->get("expressions/" . $$partr);
+  $$partr = qx/$expr/;
 }
 
 # follow path, report errors, perform function in $mode
 sub run {
-  1;
+  my $partsr = shift;
+  exit 1 unless scalar @$partsr;
+
+  my $file = "";
+  my $tmp_path = $confd;
+
+  # find files, stopping when not a file
+  for my $part (@$partsr) {
+    # still looking for file
+    if ($file eq "") {
+      $tmp_path .= "/" . $part . ".json";
+
+      if (-f $tmp_path) {
+        $file = $tmp_path;
+        $tmp_path = "";
+        
+        next;
+      }
+      else {
+        $file = $confd . "/defaults.json";
+        if (-f $file) {
+          $tmp_path = "";
+          
+          next;
+        }
+        else {
+          exit 1;
+        }
+      }
+    }
+    else {
+      if ($tmp_path eq "") {
+        $tmp_path = $part;
+      }
+      else {
+        $tmp_path .= "/" . $part;
+      }
+    }
+  }
+
+  # TODO potential bug, if $file does not exist or is invalid
+  my $json_obj = Config::JSON->new($file);
+  # TODO potential bug if $json_obj is undefined or
+  # $tmp_path is empty string
+  my $info = $json_obj->get($tmp_path);
+
+  if ($mode == Mode::OPEN || $mode == Mode::CAT) {
+    # get path in obj
+    # if scalar and file, open file
+    # if list with elem 0, open file at [0]
+    # if hash with key _default, open file at {_default}
+  }
+  elsif ($mode == Mode::LIST) {
+    # get path in obj
+    # if scalar, print
+    # if list, print
+    # if hash, print values
+  }
+  elsif ($mode == Mode::NEW) {
+    # get path, ensuring it exists
+    # set path to second positional command-line argument and any others
+  }
+  elsif ($mode == Mode::EDIT_CONF) {
+    # open $file
+  }
+  else {
+    # TODO
+    die "debugging function unimplemented!";
+  }
 }
 
 sub HELP {
