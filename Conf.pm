@@ -103,9 +103,10 @@ sub split_path {
     eval_alias(\$path);
   }
 
-  my @parts = split '.', $path;
+  my @parts = split '\.', $path;
+  # say join ' ', @parts;
   if ($expr_enabled) {
-    for my $part ($parts) {
+    for my $part (@parts) {
       eval_expr(\$part);
     }
   }
@@ -118,7 +119,7 @@ sub eval_alias {
   my $pathr = shift;
 
   my $aliases = $settings->get("aliases");
-  for my($k, $v) (each %{$aliases}) {
+  while (my($k, $v) = each %$aliases) {
     $$pathr =~ s/$k/$v/;
   }
 }
@@ -128,7 +129,7 @@ sub eval_expr {
   my $partr = shift;
 
   my $expr = $settings->get("expressions/" . $$partr);
-  $$partr = qx/$expr/;
+  $$partr = qx/$expr/ if defined $expr;
 }
 
 # follow path, report errors, perform function in $mode
@@ -139,9 +140,7 @@ sub run {
   my $file = "";
   my $tmp_path = $confd;
 
-  # find files, stopping when not a file
   for my $part (@$partsr) {
-    # still looking for file
     if ($file eq "") {
       $tmp_path .= "/" . $part . ".json";
 
@@ -154,49 +153,75 @@ sub run {
       else {
         $file = $confd . "/defaults.json";
         if (-f $file) {
-          $tmp_path = "";
+          $tmp_path = $part;
           
           next;
         }
         else {
-          exit 1;
+          return 1;
         }
       }
     }
     else {
-      if ($tmp_path eq "") {
-        $tmp_path = $part;
-      }
-      else {
-        $tmp_path .= "/" . $part;
-      }
+      $tmp_path .= "/" . $part;
     }
   }
 
-  # TODO potential bug, if $file does not exist or is invalid
+  return 1 if $file eq "";
+
   my $json_obj = Config::JSON->new($file);
   # TODO potential bug if $json_obj is undefined or
   # $tmp_path is empty string
   my $info = $json_obj->get($tmp_path);
 
+  if (!defined($info) && $mode != Mode::NEW) {
+    return 1;
+  }
+
+  my $ref_type = ref $info;
+
   if ($mode == Mode::OPEN || $mode == Mode::CAT) {
-    # get path in obj
-    # if scalar and file, open file
-    # if list with elem 0, open file at [0]
-    # if hash with key _default, open file at {_default}
+    $editor = 'cat' if ($mode == Mode::CAT);
+
+    if ($ref_type eq "") {
+      exec "$editor $info" if -f $info;
+    }
+    elsif ($ref_type eq "ARRAY") {
+      if (defined $info->[0]) {
+        exec "$editor $info->[0]" if -f $info->[0];
+      }
+    }
+    elsif ($ref_type eq "HASH" && exists $info->{_default}) {
+      if (defined $info->{_default}) {
+        exec $info->{_default} if -f $info->{_default};
+      }
+    }
+
+    die "error: nothing to open at path given";
   }
   elsif ($mode == Mode::LIST) {
-    # get path in obj
-    # if scalar, print
-    # if list, print
-    # if hash, print values
+    if ($ref_type eq "") {
+      say $info;
+    }
+    elsif ($ref_type eq "ARRAY") {
+      say join("\n", @$info);
+    }
+    elsif ($ref_type eq "HASH") {
+      say join("\n", values %$info);
+    }
   }
   elsif ($mode == Mode::NEW) {
-    # get path, ensuring it exists
-    # set path to second positional command-line argument and any others
+    say "creating something: "; #ASSERT
+    if (scalar $ARGV[0]) {
+      say $ARGV[0]; #ASSERT
+      $json_obj->set($tmp_path, $ARGV[0]);
+    }
+    else {
+      die "usage: conf -n [path] [data]";
+    }
   }
   elsif ($mode == Mode::EDIT_CONF) {
-    # open $file
+    exec "$editor $file";
   }
   else {
     # TODO
@@ -227,7 +252,9 @@ EOM
 }
 
 sub VERSION {
-  say "you are running `conf` v${version}";
-  
+  say "you are running `conf` v${version}.";
+  say "copyright (C) 2018 Adam Marshall.";
+  say "this software is provided under the MIT License";
+
   exit 0;
 }

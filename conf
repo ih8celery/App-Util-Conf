@@ -67,7 +67,6 @@ use warnings;
 
 use feature qw{say};
 
-use File::Basename;
 use Getopt::Long;
 
 use lib "$ENV{HOME}/proj/conf";
@@ -85,7 +84,7 @@ if (scalar @ARGV) {
   $path = shift @ARGV;
 }
 else {
-  die "error: missing path";
+  die "usage: conf [options] [path] [data]";
 }
 
 my @path_parts = split_path($path);
