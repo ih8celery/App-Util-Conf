@@ -1,40 +1,50 @@
-shconf version 0.1.0
+# Summary
 
-# What is shconf?
-this perl script can modify and source user-owned shell configuration files
-automatically or open the right file with the default editor.
-shconf is aware of 5 types of files:
-  history
-  aliases
-  functions
-  run control
-  variables
+    `conf` helps you find and open your configuration files using a
+    simple notation to identify them called a path and a description of
+    your configuration setup in JSON that can be customized by you. C<conf>
+    can distinguish between "local" files, "user" files located in
+    the home directory, and "system" files. C<conf> uses JSON to
+    remember where files are located, which is reflected in the
+    format of the path.
 
-I wrote this script as a handy aid to configuring my shell of choice
-in a safe, controlled manner independent of project or other usage. I
-like to keep configuration separate and organized whenever possible.
-suggestions and pull requests are usually welcome.
+# Options
 
-# Usage
+    conf [options]? [path] [data]*
 
-shconf [options] [arguments]
+    -w|--with-editor=s set the editor used to view files
+    -S|--system        use system files, if any
+    -U|--user          use files in user's home, if any (default)
+    -L|--local         use files in current directory, if any
+    -p|--print         print contents of file to stdout
+    -o|--open          open file in editor (default)
+    -l|--list          list important information to stdout
+    -c|--create        create a new item
+    -d|--debug         print debugging information about a path
+    -e|--edit-conf     open the configuration file on given path
+    -h|--help          print this help message
+    -v|--version       print version information
 
-(control locality: user files (-U) or project files (-P))
-(control action: source-file, edit-file, add-config-to-file,
-   remove-config-from-file, list-files, list-project, load-shconf)
-(control configuration affected: run-control setting (-r, default), 
-   alias (-a), functions (-f), history (-h), vars (-v))
+# Examples
 
-## Options
+    `conf -l -U bash`
 
+    lists the bash configuration files in your home directory
 
-# Installation
+    `conf -l bash.var`
 
-move the script into your path and mark is as an executable.
+    show the full path to the bash configuration file referred to as "var"
 
+    `conf bash`
+
+    opens default file associated with bash
+
+    `conf bash.rc`
+
+    opens the run control file for bash in your home directory
 
 # Copyright and License
 
-Copyright (C) 2018 Adam Marshall
+Copyright (C) 2018 Adam Marshall.
 
-This software is available under the MIT License. (TODO)
+this software is available under the MIT License
