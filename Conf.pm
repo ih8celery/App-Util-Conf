@@ -1,35 +1,11 @@
 #!/usr/bin/env perl
+# 
+# file: Conf.pm
+# author: Adam Marshall (ih8celery)
+# brief: definitions of functions, variables, and constants
+# required by the conf script
 
 package Conf;
-
-=pod
-  identify configuration files using simple names
-
-search for files matching path (choose default file if none)
-
-search data structure for rest of path
-
-open correct configuration file
-
-global config:
-{
-  defaults: /* default options, will override above defaults */
-  aliases: /* pairs of paths and replacements for them */
-  expressions: /* names on paths and shell programs */
-}
-
-config.json:
-{
-  bash: {
-    rc: {
-      local: ".bashrc",
-      system: "",
-      home: "~/.bashrc"
-    },
-    var: "~/.bash_var"
-  }
-}
-=cut
 
 use strict;
 use warnings;
@@ -104,11 +80,8 @@ sub split_path {
   }
 
   my @parts = split '\.', $path;
-  # say join ' ', @parts;
   if ($expr_enabled) {
-    for my $part (@parts) {
-      eval_expr(\$part);
-    }
+    @parts = map { eval_expr($_) } @parts;
   }
 
   return @parts;
@@ -126,10 +99,16 @@ sub eval_alias {
 
 # replace string with result of evaluating an expression
 sub eval_expr {
-  my $partr = shift;
+  my $part = shift;
 
-  my $expr = $settings->get("expressions/" . $$partr);
-  $$partr = qx/$expr/ if defined $expr;
+  my $expr = $settings->get("expressions/" . $part);
+  if (defined $expr) {
+    $part = qx/$expr/;
+
+    chomp $part;
+  }
+
+  return $part;
 }
 
 # follow path, report errors, perform function in $mode
