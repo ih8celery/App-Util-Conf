@@ -91,7 +91,7 @@ package Mode {
   use constant EDIT_CONF => 5;
 }
 
-our $VERSION = 'v0.01';
+our $VERSION = '0.05';
 our $level   = Level::HOME;
 our $mode    = Mode::OPEN;
 our $alias_enabled = 0;
