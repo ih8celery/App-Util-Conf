@@ -7,6 +7,57 @@
 
 package Conf;
 
+=head1 Summary
+
+C<conf> helps you find and open your configuration files using a
+simple notation to identify them called a path and a description of
+your configuration setup in JSON that can be customized by you. C<conf>
+can distinguish between "local" files, "user" files located in
+the home directory, and "system" files. C<conf> uses JSON to
+remember where files are located, which is reflected in the
+format of the path.
+
+=head1 Usage
+
+conf [options] [path] [path]
+
+=head2 Options
+
+-w|--with-editor=s set the editor used to view files
+-S|--system        use system files, if any
+-U|--user          use files in user's home, if any (default)
+-L|--local         use files in current directory, if any
+-p|--print         print contents of file to stdout
+-o|--open          open file in editor (default)
+-l|--list          list important information to stdout
+-c|--create        create a new item
+-d|--debug         print debugging information about a path
+-e|--edit-conf     open the configuration file on given path
+-h|--help          print this help message
+-v|--version       print version information
+
+=head2 Path
+
+=head1 Examples
+
+ conf -l -U bash
+
+lists the bash configuration files in your home directory
+
+ conf -l bash.var
+
+show the full path to the bash configuration file referred to as "var"
+
+ conf bash
+
+opens default file associated with bash
+
+ conf bash.rc
+
+opens the run control file for bash in your home directory
+
+=cut 
+
 use strict;
 use warnings;
 
@@ -14,6 +65,8 @@ use feature qw/say/;
 
 use Config::JSON;
 use Cwd qw/cwd/;
+use Getopt::Long;
+use YAML::XS;
 
 BEGIN {
   use Exporter;
@@ -39,7 +92,7 @@ package Mode {
   use constant EDIT_CONF => 5;
 }
 
-our $version = '0.01';
+our $VERSION = 'v0.01';
 our $level   = Level::HOME;
 our $mode    = Mode::OPEN;
 our $alias_enabled = 0;
@@ -63,6 +116,9 @@ our %opts    = (
   'h|help'      => \&HELP,
   'v|version'   => \&VERSION,
 );
+
+Getopt::Long::Configure('no_ignore_case');
+Getopt::Long::Configure('no_auto_abbrev');
 
 sub load_app_config {
   if (-f $configf) {
@@ -113,13 +169,23 @@ sub eval_expr {
 
 # follow path, report errors, perform function in $mode
 sub run {
-  my $partsr = shift;
-  exit 1 unless scalar @$partsr;
+  GetOptions(%opts);
 
+  load_app_config();
+
+  my $path;
+  if (scalar @ARGV) {
+    $path = shift @ARGV;
+  }
+  else {
+    die "usage: conf [options] [path [data]]";
+  }
+
+  my @path_parts = split_path($path);
   my $file = "";
   my $tmp_path = $confd;
 
-  for my $part (@$partsr) {
+  for my $part (@path_parts) {
     if ($file eq "") {
       $tmp_path .= "/" . $part . ".json";
 
@@ -231,7 +297,7 @@ EOM
 }
 
 sub VERSION {
-  say "you are running `conf` v${version}.";
+  say "you are running `conf` $VERSION";
   say "copyright (C) 2018 Adam Marshall.";
   say "this software is provided under the MIT License";
 
