@@ -63,7 +63,6 @@ use warnings;
 
 use feature qw/say/;
 
-use Config::JSON;
 use Cwd qw/cwd/;
 use Getopt::Long;
 use YAML::XS;
