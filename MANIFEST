@@ -1,0 +1,6 @@
+MANIFEST              List of files in this distribution
+README.md             Introduction to the project
+INSTALL               Installation How-To
+lib/App/Util/Conf.pm  App::Util::Conf
+bin/conf              executable script
+Build.PL              build the project
