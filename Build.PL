@@ -7,13 +7,12 @@ use Module::Build;
 
 my $build = Module::Build->new(
   module_name    => 'App::Util::Conf',
-  licence        => 'MIT',
+  license        => 'MIT',
   requires       => {
     'Getopt::Long' => '2.5',
     'Cwd'          => '0',
     'YAML::XS'     => '0'
   },
-  install_path   => { conf => "$ENV{HOME}/bin" },
   dist_version   => '0.05',
   dist_abstract  => 'META.yml'
 );
