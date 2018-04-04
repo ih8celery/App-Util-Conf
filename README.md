@@ -12,18 +12,18 @@ format of the path.
 
 conf [options]? [path] [data]*
 
--w|--with-editor=s set the editor used to view files
--S|--system        use system files, if any
--U|--user          use files in user's home, if any (default)
--L|--local         use files in current directory, if any
--p|--print         print contents of file to stdout
--o|--open          open file in editor (default)
--l|--list          list important information to stdout
--c|--create        create a new item
--d|--debug         print debugging information about a path
--e|--edit-conf     open the configuration file on given path
--h|--help          print this help message
--v|--version       print version information
+-w|--with-editor=s set the editor used to view files<br>
+-S|--system        use system files, if any<br>
+-U|--user          use files in user's home, if any (default)<br>
+-L|--local         use files in current directory, if any<br>
+-p|--print         print contents of file to stdout<br>
+-o|--open          open file in editor (default)<br>
+-l|--list          list important information to stdout<br>
+-c|--create        create a new item<br>
+-d|--debug         print debugging information about a path<br>
+-e|--edit-conf     open the configuration file on given path<br>
+-h|--help          print this help message<br>
+-v|--version       print version information<br>
 
 # Examples
 
