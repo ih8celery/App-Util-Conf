@@ -5,226 +5,74 @@
 # brief: definitions of functions, variables, and constants
 # required by the conf script
 
-package Conf;
+package App::Util::Conf;
 
 use strict;
 use warnings;
 
 use feature qw/say/;
 
-use Const::Fast;
-use Cwd qw/cwd/;
+use Cwd qw/getcwd/;
 use Getopt::Long;
-use YAML::XS;
+use YAML::XS qw/LoadFile DumpFile/;
 
 BEGIN {
   use Exporter;
+
   our @ISA    = qw/Exporter/;
-  our @EXPORT = qw(
-              %opts &load_app_config &split_path
-              &eval_alias &eval_expr &run $mode
-              $level);
+  our @EXPORT = qw/&run/;
 }
 
 package Level {
-  use constant LOCAL  => 0;
-  use constant HOME   => 1;
-  use constant SYSTEM => 2;
+  our $LOCAL  = 0;
+  our $HOME   = 1;
+  our $SYSTEM = 2;
 }
 
 package Mode {
-  use constant OPEN      => 0;
-  use constant CAT       => 1;
-  use constant NEW       => 2;
-  use constant LIST      => 3;
-  use constant DEBUG     => 4;
-  use constant EDIT_CONF => 5;
+  our $OPEN      = 0;
+  our $CAT       = 1;
+  our $NEW       = 2;
+  our $LIST      = 3;
+  our $DEBUG     = 4;
+  our $EDIT_CONF = 5;
 }
 
+# module parameters
 our $VERSION = '0.05';
-our $level   = Level::HOME;
-our $mode    = Mode::OPEN;
-our $alias_enabled = 0;
-our $expr_enabled  = 1;
-our $editor  = $ENV{EDITOR} || 'vim';
-our $settings;
-our $configf = "$ENV{HOME}/.confrc";
-our $confd   = "$ENV{HOME}/.conf.d";
-our $cwd     = cwd();
-our %opts    = (
-  'w|with-editor=s' => \$editor,
-  'S|system'    => sub { $level = Level::SYSTEM },
-  'U|user'      => sub { $level = Level::HOME },
-  'L|local'     => sub { $level = Level::LOCAL },
-  'p|print'     => sub { $mode  = Mode::CAT },
-  'o|open'      => sub { $mode  = Mode::OPEN },
-  'l|list'      => sub { $mode  = Mode::LIST },
-  'c|create'    => sub { $mode  = Mode::NEW },
-  'd|debug'     => sub { $mode  = Mode::DEBUG },
-  'e|edit-conf' => sub { $mode  = Mode::EDIT_CONF },
-  'h|help'      => \&HELP,
-  'v|version'   => \&VERSION,
+our $EDITOR  = $ENV{EDITOR} || 'vim';
+our $CWD     = getcwd;
+
+# general settings
+our $LEVEL = $Level::HOME;
+our $MODE  = $Mode::OPEN;
+
+# special settings
+our $ALIAS_ENABLED = 0;
+our $EXPR_ENABLED  = 1;
+our $CONFIG_FILE   = "$ENV{HOME}/.confrc";
+our $RECORDS_DIR   = "$ENV{HOME}/.conf.d";
+
+# command-line options
+our %OPTS    = (
+  'w|with-editor=s' => \$EDITOR,
+  'S|system'    => sub { $LEVEL = $Level::SYSTEM },
+  'U|user'      => sub { $LEVEL = $Level::HOME },
+  'L|local'     => sub { $LEVEL = $Level::LOCAL },
+  'p|print'     => sub { $MODE  = $Mode::CAT },
+  'o|open'      => sub { $MODE  = $Mode::OPEN },
+  'l|list'      => sub { $MODE  = $Mode::LIST },
+  'c|create'    => sub { $MODE  = $Mode::NEW },
+  'd|debug'     => sub { $MODE  = $Mode::DEBUG },
+  'e|edit-conf' => sub { $MODE  = $Mode::EDIT_CONF },
+  'h|help'      => \&_help,
+  'v|version'   => \&_version,
 );
 
 Getopt::Long::Configure('no_ignore_case');
-Getopt::Long::Configure('no_auto_abbrev');
 
-sub load_app_config {
-  if (-f $configf) {
-    $settings = Load($configf);
-  }
-}
-
-# evaluate aliases, split path string on '.',
-# report errors, and replace parts with expressions
-sub split_path {
-  my $path = shift;
-
-  if ($alias_enabled) {
-    eval_alias(\$path);
-  }
-
-  my @parts = split '\.', $path;
-  if ($expr_enabled) {
-    @parts = map { eval_expr($_) } @parts;
-  }
-
-  return @parts;
-}
-
-# replace a substring with alias, if defined 
-sub eval_alias {
-  my $pathr = shift;
-
-  my $aliases = $settings{aliases};
-  while (my($k, $v) = each %$aliases) {
-    $$pathr =~ s/$k/$v/;
-  }
-}
-
-# replace string with result of evaluating an expression
-sub eval_expr {
-  my $part = shift;
-
-  my $expr = $settings{expressions}{$part};
-  if (defined $expr) {
-    $part = qx/$expr/;
-
-    chomp $part;
-  }
-
-  return $part;
-}
-
-# follow path, report errors, perform function in $mode
-sub run {
-  GetOptions(%opts);
-
-  load_app_config();
-
-  my $path;
-  if (scalar @ARGV) {
-    $path = shift @ARGV;
-  }
-  else {
-    die "usage: conf [options] [path [data]]";
-  }
-
-  my @path_parts = split_path($path);
-  my $file = "";
-  my $tmp_path = $confd;
-
-  # TODO get the right data from object
-  for my $part (@path_parts) {
-    if ($file eq "") {
-      $tmp_path .= "/" . $part . ".json";
-
-      if (-f $tmp_path) {
-        $file = $tmp_path;
-        $tmp_path = "";
-        
-        next;
-      }
-      else {
-        $file = $confd . "/defaults.json";
-        if (-f $file) {
-          $tmp_path = $part;
-          
-          next;
-        }
-        else {
-          return 1;
-        }
-      }
-    }
-    else {
-      $tmp_path .= "/" . $part;
-    }
-  }
-
-  return 1 if $file eq "";
-
-  my $hash_ref = Load($file);
-  # TODO potential bug if $json_obj is undefined or
-  # $tmp_path is empty string
-  my $info = $hash_ref{$tmp_path};
-
-  if (!defined($info) && $mode != Mode::NEW) {
-    return 1;
-  }
-
-  my $ref_type = ref $info;
-
-  if ($mode == Mode::OPEN || $mode == Mode::CAT) {
-    $editor = 'cat' if ($mode == Mode::CAT);
-
-    if ($ref_type eq "") {
-      exec "$editor $info" if -f $info;
-    }
-    elsif ($ref_type eq "ARRAY") {
-      if (defined $info->[0]) {
-        exec "$editor $info->[0]" if -f $info->[0];
-      }
-    }
-    elsif ($ref_type eq "HASH" && exists $info->{_default}) {
-      if (defined $info->{_default}) {
-        exec $info->{_default} if -f $info->{_default};
-      }
-    }
-
-    die "error: nothing to open at path given";
-  }
-  elsif ($mode == Mode::LIST) {
-    if ($ref_type eq "") {
-      say $info;
-    }
-    elsif ($ref_type eq "ARRAY") {
-      say join("\n", @$info);
-    }
-    elsif ($ref_type eq "HASH") {
-      say join("\n", values %$info);
-    }
-  }
-  elsif ($mode == Mode::NEW) {
-    say "creating something: "; #ASSERT
-    if (scalar $ARGV[0]) {
-      say $ARGV[0]; #ASSERT
-      $json_obj->set($tmp_path, $ARGV[0]);
-    }
-    else {
-      die "usage: conf -n [path] [data]";
-    }
-  }
-  elsif ($mode == Mode::EDIT_CONF) {
-    exec "$editor $file";
-  }
-  else {
-    # TODO
-    die "debugging function unimplemented!";
-  }
-}
-
-sub HELP {
+# print help message and exit
+sub _help {
   say <<EOM;
 manipulate configuration files lazily.
 
@@ -246,13 +94,185 @@ EOM
   exit 0;
 }
 
-sub VERSION {
-  say "you are running `conf` $VERSION";
-  say "copyright (C) 2018 Adam Marshall.";
-  say "this software is provided under the MIT License";
-
+# print version and exit
+sub _version {
+  say "conf $VERSION";
   exit 0;
 }
+
+# print error message and exit
+sub _error {
+  my ($msg, $code) = @_;
+
+  if (defined $msg) {
+    say $msg;
+
+    if (defined $code) {
+      exit (0 + $code);
+    }
+    else {
+      exit 1;
+    }
+  }
+  else {
+    _help();
+  }
+}
+
+# define functions that directly handle settings imported
+# from $CONFIG_FILE
+{
+  my $SETTINGS;
+
+  # load config file and change affected settings
+  sub configure_app {
+    $SETTINGS = LoadFile($CONFIG_FILE) if -f $CONFIG_FILE;
+  }
+
+  # replace a substring with alias, if defined 
+  sub eval_alias {
+    my ($ea_path_ref) = @_;
+
+    while (my($ea_k, $ea_v) = each %{ $SETTINGS->{aliases} }) {
+      $$ea_path_ref =~ s/$ea_k/$ea_v/;
+    }
+  }
+
+  # replace string with result of evaluating an expression
+  sub eval_expr {
+    my ($ee_part) = @_;
+
+    my $ee_expr = $SETTINGS->{expressions}{$ee_part};
+    if (defined $ee_expr) {
+      $ee_part = qx/$ee_expr/;
+
+      chomp $ee_part;
+    }
+
+    return $ee_part;
+  }
+}
+
+# evaluate aliases, split path string on '.',
+# report errors, and replace parts with expressions
+sub split_path {
+  my $sp_path = shift;
+
+  if ($ALIAS_ENABLED) {
+    eval_alias(\$sp_path);
+  }
+
+  my @sp_parts = split '\.', $sp_path;
+  if ($EXPR_ENABLED) {
+    @sp_parts = map { eval_expr($_) } @sp_parts;
+  }
+
+  return @sp_parts;
+}
+
+# follow path, report errors, perform function in $MODE
+sub run {
+  my ($r_path) = @ARGV;
+  my @r_path_parts;
+  my $r_file   = '';
+  my $r_tmp_path = $RECORDS_DIR;
+
+  _error('usage: conf [options] [path [data]]') unless defined $r_path;
+
+  GetOptions(%OPTS);
+
+  configure_app();
+
+  @r_path_parts = split_path($r_path);
+
+  # TODO get the right data from object
+  for my $r_part (@r_path_parts) {
+    if ($r_file eq "") {
+      $r_tmp_path .= "/" . $r_part . ".json";
+
+      if (-f $r_tmp_path) {
+        $r_file = $r_tmp_path;
+        $r_tmp_path = "";
+        
+        next;
+      }
+      else {
+        $r_file = $RECORDS_DIR . "/defaults.json";
+        if (-f $r_file) {
+          $r_tmp_path = $r_part;
+          
+          next;
+        }
+        else {
+          return 1;
+        }
+      }
+    }
+    else {
+      $r_tmp_path .= "/" . $r_part;
+    }
+  }
+
+  return 1 unless -f $r_file;
+
+  my $r_records = LoadFile($r_file);
+  my $r_info = $r_records->{$r_tmp_path};
+
+  if (!defined($r_info) && $MODE != $Mode::NEW) {
+    return 1;
+  }
+
+  my $r_info_type = ref $r_info;
+
+  if ($MODE == $Mode::OPEN || $MODE == $Mode::CAT) {
+    $EDITOR = 'cat' if ($MODE == $Mode::CAT);
+
+    if ($r_info_type eq "") {
+      exec "$EDITOR $r_info" if -f $r_info;
+    }
+    elsif ($r_info_type eq "ARRAY") {
+      if (defined $r_info->[0]) {
+        exec "$EDITOR $r_info->[0]" if -f $r_info->[0];
+      }
+    }
+    elsif ($r_info_type eq "HASH" && exists $r_info->{_default}) {
+      if (defined $r_info->{_default}) {
+        exec $r_info->{_default} if -f $r_info->{_default};
+      }
+    }
+
+    die "error: nothing to open at path given";
+  }
+  elsif ($MODE == $Mode::LIST) {
+    if ($r_info_type eq "") {
+      say $r_info;
+    }
+    elsif ($r_info_type eq "ARRAY") {
+      say join("\n", @$r_info);
+    }
+    elsif ($r_info_type eq "HASH") {
+      say join("\n", values %$r_info);
+    }
+  }
+  elsif ($MODE == $Mode::NEW) {
+    say "creating something: "; #ASSERT
+    if (scalar $ARGV[0]) {
+      say $ARGV[0]; #ASSERT
+    }
+    else {
+      die "usage: conf -n [path] [data]";
+    }
+  }
+  elsif ($MODE == $Mode::EDIT_CONF) {
+    exec "$EDITOR $r_file";
+  }
+  else {
+    # TODO
+    die "debugging function unimplemented!";
+  }
+}
+
+__END__
 
 =head1 Summary
 
@@ -304,4 +324,3 @@ opens default file associated with bash
 opens the run control file for bash in your home directory
 
 =cut 
-
