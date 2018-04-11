@@ -4,6 +4,5 @@
 # author: Adam Marshall (ih8celery)
 # brief: manipulate configuration files lazily
 
-use Conf;
-
+use App::Util::Conf;
 run();
