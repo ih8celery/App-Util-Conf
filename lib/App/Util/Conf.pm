@@ -52,11 +52,15 @@ our $RECORDS_DIR   = $ENV{CONF_APP_RECORDS} || '.conf.d';
 # command-line options
 our %OPTS = (
   'w|with-editor=s' => \$EDITOR,
-  'S|system'    => sub { $LEVEL = $Level::SYSTEM },
-  'U|user'      => sub { $LEVEL = $Level::USER },
-  'L|local'     => sub { $LEVEL = $Level::LOCAL },
-  'h|help'      => \&_help,
-  'v|version'   => \&_version,
+  'S|system'     => sub { $LEVEL = $Level::SYSTEM },
+  'U|user'       => sub { $LEVEL = $Level::USER },
+  'L|local'      => sub { $LEVEL = $Level::LOCAL },
+  'h|help'       => \&_help,
+  'v|version'    => \&_version,
+  'a|aliases'    => sub { $ALIAS_ENABLED = 1; },
+  'A|no-aliases' => sub { $ALIAS_ENABLED = 0; },
+  'e|exprs'      => sub { $EXPR_ENABLED = 1; },
+  'E|no-exprs'   => sub { $EXPR_ENABLED = 0; }
 );
 
 Getopt::Long::Configure('no_ignore_case');
@@ -71,6 +75,10 @@ Options:
   -L|--local         use files in current directory, if any
   -h|--help          print this help message
   -v|--version       print version information
+  -a|--aliases       enable aliases in path processing
+  -A|--no-aliases    disable aliases in path processing
+  -e|--exprs         enable expressions in path processing
+  -E|--no-exprs      disable expressions in path processing
 EOM
 
   exit 0;
@@ -423,6 +431,22 @@ print this help message
 =item -v|--version
 
 print version information
+
+=item -a|--aliases
+
+enable aliases
+
+=item -A|--no-aliases
+
+disable aliases (default)
+
+=item -e|--exprs
+
+enable expressions (default)
+
+=item -E|--no-exprs
+
+disable expressions
 
 =back
 
