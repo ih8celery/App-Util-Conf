@@ -73,6 +73,22 @@ remember where files are located.
 
     print version information
 
+- -a|--aliases
+
+    enable aliases
+
+- -A|--no-aliases
+
+    disable aliases (default)
+
+- -e|--exprs
+
+    enable expressions (default)
+
+- -E|--no-exprs
+
+    disable expressions
+
 # Path
 
 the path is a single argument of one or more dot-delimited strings
