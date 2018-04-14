@@ -187,7 +187,7 @@ sub process_path {
   for (my $i = 0; $i < $pp_num_parts; ++$i) {
     $pp_temp_file = _join_filepaths($pp_temp_file, $pp_parts[$i]);
 
-    if (-f $pp_temp_file) {
+    if (-e $pp_temp_file) {
       $pp_file = $pp_temp_file;
       next;
     }
