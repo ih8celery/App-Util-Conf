@@ -2,8 +2,8 @@
 # 
 # file: Conf.pm
 # author: Adam Marshall (ih8celery)
-# brief: definitions of functions, variables, and constants
-# required by the conf script
+# brief: find and open configuration files using custom
+# names
 
 package App::Util::Conf;
 
@@ -24,47 +24,38 @@ BEGIN {
 }
 
 package Level {
-  our $LOCAL  = 0;
-  our $HOME   = 1;
-  our $SYSTEM = 2;
+  our $LOCAL  = 'local';
+  our $USER   = 'user';
+  our $SYSTEM = 'system';
 }
 
-package Mode {
-  our $OPEN      = 0;
-  our $CAT       = 1;
-  our $NEW       = 2;
-  our $LIST      = 3;
-  our $DEBUG     = 4;
-  our $EDIT_CONF = 5;
+package Action {
+  our $OPEN = 0;
+  our $LIST = 1;
 }
 
 # module parameters
 our $VERSION = '0.05';
 our $EDITOR  = $ENV{EDITOR} || 'vim';
-our $CWD     = getcwd;
 
 # general settings
-our $LEVEL = $Level::HOME;
-our $MODE  = $Mode::OPEN;
+our $LEVEL  = $Level::USER;
+our $ACTION = $Action::OPEN;
 
 # special settings
 our $ALIAS_ENABLED = 0;
-our $EXPR_ENABLED  = 1;
-our $CONFIG_FILE   = "$ENV{HOME}/.confrc";
-our $RECORDS_DIR   = "$ENV{HOME}/.conf.d";
+our $EXPR_ENABLED  = 0;
+our $CONFIG_FILE   = $ENV{CONF_APP_RC}
+      || _join_filepaths($ENV{HOME}, '.confrc');
+our $RECORDS_DIR   = $ENV{CONF_APP_RECORDS}
+      || _join_filepaths($ENV{HOME}, '.conf.d');
 
 # command-line options
-our %OPTS    = (
+our %OPTS = (
   'w|with-editor=s' => \$EDITOR,
   'S|system'    => sub { $LEVEL = $Level::SYSTEM },
-  'U|user'      => sub { $LEVEL = $Level::HOME },
+  'U|user'      => sub { $LEVEL = $Level::USER },
   'L|local'     => sub { $LEVEL = $Level::LOCAL },
-  'p|print'     => sub { $MODE  = $Mode::CAT },
-  'o|open'      => sub { $MODE  = $Mode::OPEN },
-  'l|list'      => sub { $MODE  = $Mode::LIST },
-  'c|create'    => sub { $MODE  = $Mode::NEW },
-  'd|debug'     => sub { $MODE  = $Mode::DEBUG },
-  'e|edit-conf' => sub { $MODE  = $Mode::EDIT_CONF },
   'h|help'      => \&_help,
   'v|version'   => \&_version,
 );
@@ -74,19 +65,11 @@ Getopt::Long::Configure('no_ignore_case');
 # print help message and exit
 sub _help {
   say <<EOM;
-manipulate configuration files lazily.
-
-options:
+Options:
   -w|--with-editor=s set the editor used to view files
   -S|--system        use system files, if any
   -U|--user          use files in user's home, if any
   -L|--local         use files in current directory, if any
-  -p|--print         print contents of file to stdout
-  -o|--open          open file in editor
-  -l|--list          list important information to stdout
-  -c|--create        create a new item
-  -d|--debug         print debugging information about a path
-  -e|--edit-conf     open the configuration file on given path
   -h|--help          print this help message
   -v|--version       print version information
 EOM
@@ -105,7 +88,7 @@ sub _error {
   my ($msg, $code) = @_;
 
   if (defined $msg) {
-    say $msg;
+    say 'error: ', $msg;
 
     if (defined $code) {
       exit (0 + $code);
@@ -115,7 +98,8 @@ sub _error {
     }
   }
   else {
-    _help();
+    say 'usage: conf [subcommand] [opts] [path]';
+    exit 1;
   }
 }
 
@@ -129,148 +113,225 @@ sub _error {
     $SETTINGS = LoadFile($CONFIG_FILE) if -f $CONFIG_FILE;
   }
 
-  # replace a substring with alias, if defined 
+  # replace strings with alias definitions, if defined 
   sub eval_alias {
-    my ($ea_path_ref) = @_;
+    my ($ea_array) = @_;
 
-    while (my($ea_k, $ea_v) = each %{ $SETTINGS->{aliases} }) {
-      $$ea_path_ref =~ s/$ea_k/$ea_v/;
+    for (my $i = 0; $i < scalar @{$ea_array}; $i++) {
+      if (defined $SETTINGS->{aliases}{ $ea_array->[$i] }) {
+        $ea_array->[$i] = $SETTINGS->{aliases}{ $ea_array->[$i] };
+      }
     }
   }
 
-  # replace string with result of evaluating an expression
+  # replace strings with results of evaluating an expression
   sub eval_expr {
-    my ($ee_part) = @_;
+    my ($ee_array) = @_;
 
-    my $ee_expr = $SETTINGS->{expressions}{$ee_part};
-    if (defined $ee_expr) {
-      $ee_part = qx/$ee_expr/;
+    for (my $i = 0; $i < scalar @$ee_array; $i++) {
+      if (defined $SETTINGS->{expressions}{ $ee_array->[$i] }) {
+        $ee_array->[$i]
+          = qx/$SETTINGS->{expressions}{ $ee_array->[$i] }/;
 
-      chomp $ee_part;
+        chomp $ee_array->[$i];
+      }
     }
-
-    return $ee_part;
   }
 }
 
-# evaluate aliases, split path string on '.',
-# report errors, and replace parts with expressions
-sub split_path {
-  my $sp_path = shift;
+# try to find subcommand in argv
+sub get_subcommand {
+  my $gs_num_args = scalar @ARGV;
+  if ($gs_num_args == 0) {
+    _help();  
+  }
+  else {
+    if ($ARGV[0] eq '-h' || $ARGV[0] eq '--help') {
+      _help();
+    }
+    elsif ($ARGV[0] eq '-v' || $ARGV[0] eq '--version') {
+      _version();
+    }
+    elsif ($ARGV[0] eq 'go') {
+      $ACTION = $Action::OPEN;
+    }
+    elsif ($ARGV[0] eq 'ls') {
+      $ACTION = $Action::LIST;
+    }
+    else {
+      _error('expected global option or subcommand as first arg');
+    }
+  }
+}
 
+# split argument into a list
+# along the way, evaluate aliases and expressions
+sub process_path {
+  my ($pp_path) = @_;
+  my $pp_file = _pp_find_starting_point($LEVEL) || _error('no files');
+  my @pp_parts = split /\./, $pp_path;
+
+  # replace aliases to strings
   if ($ALIAS_ENABLED) {
-    eval_alias(\$sp_path);
+    eval_alias(\@pp_parts);
   }
 
-  my @sp_parts = split '\.', $sp_path;
+  # replace embedded expressions with the results of evaluating them
   if ($EXPR_ENABLED) {
-    @sp_parts = map { eval_expr($_) } @sp_parts;
+    eval_expr(\@pp_parts);
   }
 
-  return @sp_parts;
+  # identify the file
+  my $pp_temp_file = $pp_file;
+  my $pp_num_parts = scalar @pp_parts;
+  for (my $i = 0; $i < $pp_num_parts; ++$i) {
+    $pp_temp_file = _join_filepaths($pp_temp_file, $pp_parts[$i]);
+
+    if (-f $pp_temp_file) {
+      $pp_file = $pp_temp_file;
+      next;
+    }
+    else {
+      if ($i >= $pp_num_parts - 1) {
+        # last part, so this marks an exit
+        last;
+      }
+      else {
+        _error('no file to read (perhaps you should write one?)');
+      }
+    }
+  }
+
+  unless (-f $pp_file) {
+    _error('no file to read (perhaps you should write one?)');
+  }
+
+  # signals that file-search consumed entire path
+  if ($pp_temp_file eq $pp_file) {
+    return ($pp_file, '');
+  }
+  # a single part was left behind
+  else {
+    if ($pp_parts[-1] !~ m/^_/) {
+      return ($pp_file, $pp_parts[-1]);
+    }
+    else {
+      _error('may not select an item whose name begins with _');
+    }
+  }
 }
 
-# follow path, report errors, perform function in $MODE
-sub run {
-  my ($r_path) = @ARGV;
-  my @r_path_parts;
-  my $r_file   = '';
-  my $r_tmp_path = $RECORDS_DIR;
+# figure out where to start the search for the files with config info
+sub _pp_find_starting_point {
+  my ($locality) = @_;
 
-  _error('usage: conf [options] [path [data]]') unless defined $r_path;
+  # return for now, do checks later TODO
+  if ($locality eq $Level::USER) {
+    return _join_filepaths($RECORDS_DIR, 'user');
+  }
+  elsif ($locality eq $Level::SYSTEM) {
+    return _join_filepaths($RECORDS_DIR, 'system');
+  }
+  else {
+    return _join_filepaths(getcwd(), '.conf.d');
+  }
+}
+
+# merge parts of path in a way appropriate to platform
+sub _join_filepaths {
+  my ($left, $right) = @_;
+
+  return $left . '/' . $right;
+}
+
+# lists the contents of files or items on stdout
+sub list_stuff {
+  my ($stuff, $stuff_type) = @_;
+
+  _error('nothing to show') unless defined $stuff;
+
+  if ($stuff_type eq 'file') {
+    # stuff is a yaml object which should be printed completely
+    # print keys alongside values
+    my $root = $ENV{HOME};
+    $root = $stuff->{_root} if defined $stuff->{_root};
+    $root =~ s/\/$//;
+
+    foreach (keys %$stuff) {
+      # forbid keys beginning with '_'
+      unless (m/^_/) {
+        print $_, ' ';
+        if ($stuff->{$_} =~ m/^\//) {
+          say $stuff->{$_};
+        }
+        else {
+          say $root, '/', $stuff->{$_};
+        }
+      }
+    }
+  }
+  else {
+    # stuff is fully qualified path
+    say $stuff;
+  }
+}
+
+# main application logic
+sub run {
+  get_subcommand();
+  shift @ARGV;
 
   GetOptions(%OPTS);
 
-  configure_app();
+  configure_app($CONFIG_FILE);
+  
+  my ($r_path) = shift @ARGV || _error();
 
-  @r_path_parts = split_path($r_path);
-
-  # TODO get the right data from object
-  for my $r_part (@r_path_parts) {
-    if ($r_file eq "") {
-      $r_tmp_path .= "/" . $r_part . ".json";
-
-      if (-f $r_tmp_path) {
-        $r_file = $r_tmp_path;
-        $r_tmp_path = "";
-        
-        next;
-      }
-      else {
-        $r_file = $RECORDS_DIR . "/defaults.json";
-        if (-f $r_file) {
-          $r_tmp_path = $r_part;
-          
-          next;
-        }
-        else {
-          return 1;
-        }
-      }
-    }
-    else {
-      $r_tmp_path .= "/" . $r_part;
-    }
-  }
-
-  return 1 unless -f $r_file;
+  my ($r_file, $r_path_end) = process_path($r_path);
 
   my $r_records = LoadFile($r_file);
-  my $r_info = $r_records->{$r_tmp_path};
 
-  if (!defined($r_info) && $MODE != $Mode::NEW) {
-    return 1;
-  }
-
-  my $r_info_type = ref $r_info;
-
-  if ($MODE == $Mode::OPEN || $MODE == $Mode::CAT) {
-    $EDITOR = 'cat' if ($MODE == $Mode::CAT);
-
-    if ($r_info_type eq "") {
-      exec "$EDITOR $r_info" if -f $r_info;
+  if ($ACTION == $Action::OPEN) {
+    if ($r_path_end eq '' && -f $r_file) {
+      exec "$EDITOR $r_file";
     }
-    elsif ($r_info_type eq "ARRAY") {
-      if (defined $r_info->[0]) {
-        exec "$EDITOR $r_info->[0]" if -f $r_info->[0];
+    elsif ($r_path_end ne '' && defined $r_records->{$r_path_end}) {
+      if (defined $r_records->{_root}) {
+        exec $EDITOR . ' ' . _join_filepaths(
+            $r_records->{_root},
+            $r_records->{$r_path_end}
+        );
       }
-    }
-    elsif ($r_info_type eq "HASH" && exists $r_info->{_default}) {
-      if (defined $r_info->{_default}) {
-        exec $r_info->{_default} if -f $r_info->{_default};
+      else {
+        exec "$EDITOR $r_records->{$r_path_end}";
       }
-    }
-
-    die "error: nothing to open at path given";
-  }
-  elsif ($MODE == $Mode::LIST) {
-    if ($r_info_type eq "") {
-      say $r_info;
-    }
-    elsif ($r_info_type eq "ARRAY") {
-      say join("\n", @$r_info);
-    }
-    elsif ($r_info_type eq "HASH") {
-      say join("\n", values %$r_info);
-    }
-  }
-  elsif ($MODE == $Mode::NEW) {
-    say "creating something: "; #ASSERT
-    if (scalar $ARGV[0]) {
-      say $ARGV[0]; #ASSERT
     }
     else {
-      die "usage: conf -n [path] [data]";
+      _error('nothing to open');
     }
   }
-  elsif ($MODE == $Mode::EDIT_CONF) {
-    exec "$EDITOR $r_file";
-  }
-  else {
-    # TODO
-    die "debugging function unimplemented!";
+  elsif ($ACTION == $Action::LIST) {
+    if ($r_path_end eq '') {
+      list_stuff($r_records, 'file');
+    }
+    elsif (defined $r_records->{$r_path_end}) {
+      if (defined $r_records->{_root}) {
+        $r_path_end =
+          _join_filepaths($r_records->{_root}, $r_records->{$r_path_end});
+
+        list_stuff($r_path_end, 'item');
+      }
+      else {
+        list_stuff($r_records->{$r_path_end}, 'item');
+      }
+    }
+    else {
+      _error('nothing to show');
+    }
   }
 }
+
+1;
 
 __END__
 
@@ -278,15 +339,29 @@ __END__
 
 C<conf> helps you find and open your configuration files using a
 simple notation to identify them called a path and a description of
-your configuration setup in JSON that can be customized by you. C<conf>
+your configuration setup in YAML that can be customized by you. C<conf>
 can distinguish between "local" files, "user" files located in
-the home directory, and "system" files. C<conf> uses JSON to
+the home directory, and "system" files. C<conf> uses YAML to
 remember where files are located, which is reflected in the
 format of the path.
 
 =head1 Usage
 
-conf [options] [path] [path]
+conf [subcommand] [options] [path]
+
+=head2 Subcommands
+
+=over 4
+
+=item go
+
+open file
+
+=item ls
+
+show the contents of file or item
+
+=back
 
 =head2 Options
 
@@ -294,12 +369,6 @@ conf [options] [path] [path]
 -S|--system        use system files, if any
 -U|--user          use files in user's home, if any (default)
 -L|--local         use files in current directory, if any
--p|--print         print contents of file to stdout
--o|--open          open file in editor (default)
--l|--list          list important information to stdout
--c|--create        create a new item
--d|--debug         print debugging information about a path
--e|--edit-conf     open the configuration file on given path
 -h|--help          print this help message
 -v|--version       print version information
 
@@ -307,19 +376,19 @@ conf [options] [path] [path]
 
 =head1 Examples
 
- conf -l -U bash
+ conf ls -U bash
 
 lists the bash configuration files in your home directory
 
- conf -l bash.var
+ conf ls bash.var
 
 show the full path to the bash configuration file referred to as "var"
 
- conf bash
+ conf go bash
 
 opens default file associated with bash
 
- conf bash.rc
+ conf go bash.rc
 
 opens the run control file for bash in your home directory
 
