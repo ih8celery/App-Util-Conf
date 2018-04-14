@@ -233,7 +233,7 @@ sub _pp_find_starting_point {
     return _join_filepaths($RECORDS_DIR, 'system');
   }
   else {
-    return _join_filepaths(getcwd(), '.conf.d');
+    return _join_filepaths(getcwd(), '.conf.d', 'local');
   }
 }
 
