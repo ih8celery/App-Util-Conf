@@ -239,9 +239,14 @@ sub _pp_find_starting_point {
 
 # merge parts of path in a way appropriate to platform
 sub _join_filepaths {
-  my ($left, $right) = @_;
+  my $out = $_[0] || _error('_join_filepaths: at least one arg required');
 
-  return $left . '/' . $right;
+  my $sep = '/';
+  for(my $i = 1; $i < scalar @_; $i++) {
+    $out .= $sep . $_[ $i ];
+  }
+
+  return $out;
 }
 
 # lists the contents of files or items on stdout
