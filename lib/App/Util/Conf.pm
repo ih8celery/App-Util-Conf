@@ -246,33 +246,42 @@ sub _join_filepaths {
 
 # lists the contents of files or items on stdout
 sub list_stuff {
-  my ($stuff, $stuff_type) = @_;
+  my ($ls_records, $ls_key) = @_;
 
-  _error('nothing to show') unless defined $stuff;
+  _error('nothing to show') unless defined $ls_records;
 
-  if ($stuff_type eq 'file') {
+  if ($ls_key eq '') {
     # stuff is a yaml object which should be printed completely
     # print keys alongside values
-    my $root = $ENV{HOME};
-    $root = $stuff->{_root} if defined $stuff->{_root};
-    $root =~ s/\/$//;
+    my $ls_root = $ENV{HOME};
+    $ls_root = $ls_records->{_root} if defined $ls_records->{_root};
+    $ls_root =~ s/\/$//;
 
-    foreach (keys %$stuff) {
+    foreach (keys %$ls_records) {
       # forbid keys beginning with '_'
       unless (m/^_/) {
         print $_, ' ';
-        if ($stuff->{$_} =~ m/^\//) {
-          say $stuff->{$_};
+        if ($ls_records->{$_} =~ m/^\//) {
+          say $ls_records->{$_};
         }
         else {
-          say $root, '/', $stuff->{$_};
+          say $ls_root, '/', $ls_records->{$_};
         }
       }
     }
   }
   else {
-    # stuff is fully qualified path
-    say $stuff;
+    if (defined $ls_records->{$ls_key}) {
+      if (defined $ls_records->{_root}) {
+        say _join_filepaths($ls_records->{_root}, $ls_records->{$ls_key});
+      }
+      else {
+        say $ls_records->{$ls_key};
+      }
+    }
+    else {
+      _error('nothing to show');
+    }
   }
 }
 
@@ -318,23 +327,7 @@ sub run {
     open_stuff($r_file, $r_records, $r_path_end);
   }
   elsif ($ACTION == $Action::LIST) {
-    if ($r_path_end eq '') {
-      list_stuff($r_records, 'file');
-    }
-    elsif (defined $r_records->{$r_path_end}) {
-      if (defined $r_records->{_root}) {
-        $r_path_end =
-          _join_filepaths($r_records->{_root}, $r_records->{$r_path_end});
-
-        list_stuff($r_path_end, 'item');
-      }
-      else {
-        list_stuff($r_records->{$r_path_end}, 'item');
-      }
-    }
-    else {
-      _error('nothing to show');
-    }
+    list_stuff($r_records, $r_path_end);
   }
 }
 
