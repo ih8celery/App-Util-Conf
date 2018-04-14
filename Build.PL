@@ -13,7 +13,7 @@ my $build = Module::Build->new(
     'Cwd'          => '0',
     'YAML::XS'     => '0'
   },
-  dist_version   => '0.05',
+  dist_version   => '0.10',
   dist_abstract  => 'META.yml'
 );
 
