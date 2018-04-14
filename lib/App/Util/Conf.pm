@@ -44,7 +44,7 @@ our $ACTION = $Action::OPEN;
 
 # special settings
 our $ALIAS_ENABLED = 0;
-our $EXPR_ENABLED  = 0;
+our $EXPR_ENABLED  = 1;
 our $CONFIG_FILE   = $ENV{CONF_APP_RC}
       || _join_filepaths($ENV{HOME}, '.confrc');
 our $RECORDS_DIR   = $ENV{CONF_APP_RECORDS}
@@ -276,6 +276,29 @@ sub list_stuff {
   }
 }
 
+# open a file with default editor
+sub open_stuff {
+  my ($os_file, $os_records, $os_key) = @_;
+
+  if ($os_key eq '' && -f $os_file) {
+    exec "$EDITOR $os_file";
+  }
+  elsif ($os_key ne '' && defined $os_records->{$os_key}) {
+    if (defined $os_records->{_root}) {
+      exec $EDITOR . ' ' . _join_filepaths(
+          $os_records->{_root},
+          $os_records->{$os_key}
+      );
+    }
+    else {
+      exec "$EDITOR $os_records->{$os_key}";
+    }
+  }
+  else {
+    _error('nothing to open');
+  }
+}
+
 # main application logic
 sub run {
   get_subcommand();
@@ -292,23 +315,7 @@ sub run {
   my $r_records = LoadFile($r_file);
 
   if ($ACTION == $Action::OPEN) {
-    if ($r_path_end eq '' && -f $r_file) {
-      exec "$EDITOR $r_file";
-    }
-    elsif ($r_path_end ne '' && defined $r_records->{$r_path_end}) {
-      if (defined $r_records->{_root}) {
-        exec $EDITOR . ' ' . _join_filepaths(
-            $r_records->{_root},
-            $r_records->{$r_path_end}
-        );
-      }
-      else {
-        exec "$EDITOR $r_records->{$r_path_end}";
-      }
-    }
-    else {
-      _error('nothing to open');
-    }
+    open_stuff($r_file, $r_records, $r_path_end);
   }
   elsif ($ACTION == $Action::LIST) {
     if ($r_path_end eq '') {
