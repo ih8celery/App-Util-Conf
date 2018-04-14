@@ -47,8 +47,7 @@ our $ALIAS_ENABLED = 0;
 our $EXPR_ENABLED  = 1;
 our $CONFIG_FILE   = $ENV{CONF_APP_RC}
       || _join_filepaths($ENV{HOME}, '.confrc');
-our $RECORDS_DIR   = $ENV{CONF_APP_RECORDS}
-      || _join_filepaths($ENV{HOME}, '.conf.d');
+our $RECORDS_DIR   = $ENV{CONF_APP_RECORDS} || '.conf.d';
 
 # command-line options
 our %OPTS = (
@@ -227,13 +226,13 @@ sub _pp_find_starting_point {
 
   # return for now, do checks later TODO
   if ($locality eq $Level::USER) {
-    return _join_filepaths($RECORDS_DIR, 'user');
+    return _join_filepaths($ENV{HOME}, $RECORDS_DIR, 'user');
   }
   elsif ($locality eq $Level::SYSTEM) {
-    return _join_filepaths($RECORDS_DIR, 'system');
+    return _join_filepaths($ENV{HOME}, $RECORDS_DIR, 'system');
   }
   else {
-    return _join_filepaths(getcwd(), '.conf.d', 'local');
+    return _join_filepaths(getcwd(), $RECORDS_DIR, 'local');
   }
 }
 
@@ -354,6 +353,30 @@ your configuration setup in YAML that can be customized by you. C<conf>
 can distinguish between "local" files, "user" files located in
 the home directory, and "system" files. C<conf> uses YAML to
 remember where files are located. 
+
+C<conf> uses three shell variables:
+
+=over 4
+
+=item 1. EDITOR
+
+if defined, this variable's value will be used as the editor with which
+to open files (via the "go" subcommand)
+
+=item 2. CONF_APP_RC
+
+if defined, this variable's value will be used as the full path to the
+YAML file containing defaults and defining aliases and expressions for
+the program
+
+=item 3. CONF_APP_RECORDS
+
+if defined, this variable's value is the starting directory for searches
+for configuration listings. this variable should be a relative path
+since it will be used for searching in the home directory as well as the
+current working directory
+
+=back
 
 =head1 Subcommands
 
