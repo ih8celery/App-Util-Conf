@@ -9,11 +9,16 @@ my $build = Module::Build->new(
   module_name    => 'App::Util::Conf',
   license        => 'MIT',
   requires       => {
-    'Getopt::Long' => '2.5',
+    'Getopt::Long' => '>2.0',
     'Cwd'          => '0',
     'YAML::XS'     => '0'
   },
-  dist_version   => '0.10',
+  build_requires => {
+    'File::Temp' => '0',
+    'Test::More' => '>0.9',
+    'YAML::XS'   => '0'
+  },
+  dist_version   => '0.50',
   dist_abstract  => 'META.yml'
 );
 

@@ -5,6 +5,9 @@ author:
   - 'Adam Marshall'
 build_requires:
   Module::Build: '0'
+  YAML::XS: '0'
+  Test::More: '>0.9'
+  File::Temp: '0'
 configure_requires:
   Module::Build: '0'
 requires:
@@ -15,5 +18,5 @@ dynamic_config: 1
 resources:
   repository: https://github.com/ih8celery/App-Util-Conf.git
 license: 'MIT'
-version: '0.05'
+version: '0.10'
 
