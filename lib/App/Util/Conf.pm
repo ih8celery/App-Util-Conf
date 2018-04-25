@@ -13,7 +13,7 @@ use warnings;
 use feature qw/say/;
 
 use Cwd qw/getcwd/;
-use Getopt::Long;
+use Getopt::Long qw/:config no_ignore_case/;
 use YAML::XS qw/LoadFile DumpFile/;
 
 BEGIN {
@@ -66,8 +66,6 @@ our %OPTS = (
   'e|exprs'      => sub { $EXPR_ENABLED = 1; },
   'E|no-exprs'   => sub { $EXPR_ENABLED = 0; }
 );
-
-Getopt::Long::Configure('no_ignore_case');
 
 # print help message and exit
 sub _help {
