@@ -20,53 +20,30 @@ use YAML::XS qw/LoadFile DumpFile/;
 BEGIN {
   use Exporter;
 
-  our @ISA    = qw/Exporter/;
-  our @EXPORT = qw(&Run $EDITOR $IS_GLOBAL $ACTION $ALIAS_ENABLED
-                    $ALIAS_DISABLED $CONFIG_FILE $RECORDS_DIR
-                    &process_path &configure_app &eval_expr &eval_alias
-                    &get_subcommand &_pp_find_starting_point);
-}
-
-package Action {
-  our $OPEN = 0;
-  our $LIST = 1;
+  our @ISA       = qw/Exporter/;
+  our @EXPORT    = qw/&Run/;
+  our @EXPORT_OK = qw{
+      &process_path &configure_app &eval_expr 
+      &eval_alias &get_subcommand &_pp_find_starting_point
+  };
+  our %EXPORT_TAGS = (
+    tests => qw{
+      &Run &process_path &configure_app &eval_expr 
+      &eval_alias &get_subcommand &_pp_find_starting_point
+    }
+  );
 }
 
 # module parameters
 our $VERSION = '0.010000';
-our $EDITOR  = $ENV{EDITOR} || 'vim';
-
-# general settings
-our $IS_GLOBAL = 1;
-our $ACTION    = $Action::OPEN;
-
-# special settings
-our $ALIAS_ENABLED = 0;
-our $EXPR_ENABLED  = 1;
-our $CONFIG_FILE   = $ENV{CONF_APP_RC} || catfile($ENV{HOME}, '.confrc');
-our $RECORDS_DIR   = $ENV{CONF_APP_RECORDS} || '.conf.d';
-
-# command-line options
-our %OPTS = (
-  'w|with-editor=s' => \$EDITOR,
-  'g|global'     => sub { $IS_GLOBAL = 1; },
-  'l|local'      => sub { $IS_GLOBAL = 0; },
-  'h|help'       => \&_help,
-  'v|version'    => \&_version,
-  'a|aliases'    => sub { $ALIAS_ENABLED = 1; },
-  'A|no-aliases' => sub { $ALIAS_ENABLED = 0; },
-  'e|exprs'      => sub { $EXPR_ENABLED = 1; },
-  'E|no-exprs'   => sub { $EXPR_ENABLED = 0; }
-);
 
 # print help message and exit
 sub _help {
   say <<EOM;
 Options:
   -w|--with-editor=s set the editor used to view files
-  -S|--system        use system files, if any
-  -U|--user          use files in user's home, if any
-  -L|--local         use files in current directory, if any
+  -g|--global        use files in user's home, if any
+  -l|--local         use files in current directory, if any
   -h|--help          print this help message
   -v|--version       print version information
   -a|--aliases       enable aliases in path processing
@@ -84,58 +61,44 @@ sub _version {
   exit 0;
 }
 
-# print error message and exit
-sub _error {
-  my ($msg, $code) = @_;
+# load config file and change affected settings
+sub configure_app {
+  my ($ca_settings) = @_;
 
-  if (defined $msg) {
-    say 'error: ', $msg;
+  if (-f $ca_settings->{CONFIG_FILE}) {
+    my $ca_yaml = LoadFile($ca_settings->{CONFIG_FILE});
+    
+    if (exists $ca_yaml->{aliases}) {
+      $ca_settings->{aliases} = $ca_yaml->{aliases};
+    }
 
-    if (defined $code) {
-      exit (0 + $code);
+    if (exists $ca_yaml->{expressions}) {
+      $ca_settings->{expressions} = $ca_yaml->{expressions};
     }
-    else {
-      exit 1;
-    }
-  }
-  else {
-    say 'usage: conf [subcommand] [opts] [path]';
-    exit 1;
   }
 }
 
-# define functions that directly handle settings imported
-# from $CONFIG_FILE
-{
-  my $SETTINGS;
+# replace strings with alias definitions, if defined 
+sub eval_alias {
+  my ($ea_settings, $ea_array) = @_;
 
-  # load config file and change affected settings
-  sub configure_app {
-    $SETTINGS = LoadFile($_[0]) if -f $_[0];
-  }
-
-  # replace strings with alias definitions, if defined 
-  sub eval_alias {
-    my ($ea_array) = @_;
-
-    for (my $i = 0; $i < scalar @{$ea_array}; $i++) {
-      if (defined $SETTINGS->{aliases}{ $ea_array->[$i] }) {
-        $ea_array->[$i] = $SETTINGS->{aliases}{ $ea_array->[$i] };
-      }
+  for (my $i = 0; $i < scalar @{$ea_array}; $i++) {
+    if (defined $ea_settings->{aliases}{ $ea_array->[$i] }) {
+      $ea_array->[$i] = $ea_settings->{aliases}{ $ea_array->[$i] };
     }
   }
+}
 
-  # replace strings with results of evaluating an expression
-  sub eval_expr {
-    my ($ee_array) = @_;
+# replace strings with results of evaluating an expression
+sub eval_expr {
+  my ($ee_settings, $ee_array) = @_;
 
-    for (my $i = 0; $i < scalar @$ee_array; $i++) {
-      if (defined $SETTINGS->{expressions}{ $ee_array->[$i] }) {
-        $ee_array->[$i]
-          = qx/$SETTINGS->{expressions}{ $ee_array->[$i] }/;
+  for (my $i = 0; $i < scalar @$ee_array; $i++) {
+    if (defined $ee_settings->{expressions}{ $ee_array->[$i] }) {
+      $ee_array->[$i]
+        = qx/$ee_settings->{expressions}{ $ee_array->[$i] }/;
 
-        chomp $ee_array->[$i];
-      }
+      chomp $ee_array->[$i];
     }
   }
 }
@@ -156,10 +119,10 @@ sub get_subcommand {
       _version();
     }
     elsif (exists $gs_subcommands->{$ARGV[0]}) {
-      return (shift(@ARGV), 1);
+      return shift(@ARGV);
     }
     else {
-      return ('', 0);
+      die('error: expected global option or subcommand');
     }
   }
 }
@@ -167,18 +130,37 @@ sub get_subcommand {
 # split argument into a list
 # along the way, evaluate aliases and expressions
 sub process_path {
-  my ($pp_path) = @_;
-  my $pp_file = _pp_find_starting_point($IS_GLOBAL) || _error('no files');
+  my ($pp_settings, $pp_path) = @_;
+  my $pp_file;
+
+  if ($pp_settings->{IS_GLOBAL}) {
+    $pp_file = catfile($ENV{HOME}, $pp_settings->{RECORDS_DIR});
+  }
+  else {
+    $pp_file = catfile(getcwd(), $pp_settings->{RECORDS_DIR});
+  }
+
+  # no starting directory to work with, so the program must DIE!!
+  unless (-d $pp_file) {
+    die("error: no $pp_settings->{RECORDS_DIR} directory found");
+  }
+
+  # @ARGV was empty when this function was called, so after the
+  # starting directory is computed, return
+  unless (defined $pp_path) {
+    return ($pp_file, '');
+  }
+
   my @pp_parts = split /\./, $pp_path;
 
   # replace aliases to strings
-  if ($ALIAS_ENABLED) {
-    eval_alias(\@pp_parts);
+  if ($pp_settings->{ALIAS_ENABLED}) {
+    eval_alias($pp_settings, \@pp_parts);
   }
 
   # replace embedded expressions with the results of evaluating them
-  if ($EXPR_ENABLED) {
-    eval_expr(\@pp_parts);
+  if ($pp_settings->{EXPR_ENABLED}) {
+    eval_expr($pp_settings, \@pp_parts);
   }
 
   # identify the file
@@ -187,145 +169,159 @@ sub process_path {
   for (my $i = 0; $i < $pp_num_parts; ++$i) {
     $pp_temp_file = catfile($pp_temp_file, $pp_parts[$i]);
 
-    if (-e $pp_temp_file) {
+    if (-d $pp_temp_file) {
       $pp_file = $pp_temp_file;
       next;
     }
-    else {
-      if ($i >= $pp_num_parts - 1) {
-        # last part, so this marks an exit
-        last;
+    elsif (-f "$pp_temp_file.yml") {
+      # if a file was found and the path has been either
+      # completely processed or processed up to the last element,
+      # save the file as $pp_file
+      if ($i >= $pp_num_parts - 2) {
+        $pp_temp_file = "$pp_temp_file.yml";
+        $pp_file = $pp_temp_file;
+
+        if ($i == $pp_num_parts - 2) {
+          if ($pp_parts[-1] !~ m/^_/) {
+            return ($pp_file, $pp_parts[$i+1]);
+          }
+          else {
+            die('error: may not select an item whose name begins with _');
+          }
+        }
+        else {
+          return ($pp_file, '');
+        }
       }
-      else {
-        _error('no file to read (perhaps you should write one?)');
-      }
     }
-  }
 
-  unless (-f $pp_file) {
-    _error('no file to read (perhaps you should write one?)');
-  }
-
-  # signals that file-search consumed entire path
-  if ($pp_temp_file eq $pp_file) {
-    return ($pp_file, '');
-  }
-  # a single part was left behind
-  else {
-    if ($pp_parts[-1] !~ m/^_/) {
-      return ($pp_file, $pp_parts[-1]);
-    }
-    else {
-      _error('may not select an item whose name begins with _');
-    }
-  }
-}
-
-# figure out where to start the search for the files with config info
-sub _pp_find_starting_point {
-  my ($is_global) = @_;
-
-  # return for now, do checks later TODO
-  if ($is_global) {
-    return catfile($ENV{HOME}, $RECORDS_DIR, 'user');
-  }
-  else {
-    return catfile(getcwd(), $RECORDS_DIR, 'local');
+    die('error: no file to read (perhaps you should write one?)');
   }
 }
 
 # lists the contents of files or items on stdout
 sub list_stuff {
-  my ($ls_records, $ls_key) = @_;
+  my ($ls_settings, $ls_file, $ls_key) = @_;
 
-  _error('nothing to show') unless defined $ls_records;
+  # if file is a directory, list files in dir
+  if (-d $ls_file) {
+    # glob files with yml extension
+    my @yaml_files = glob "$ls_file/*.yml";
 
-  if ($ls_key eq '') {
-    # stuff is a yaml object which should be printed completely
-    # print keys alongside values
-    my $ls_root = $ENV{HOME};
-    $ls_root = $ls_records->{_root} if defined $ls_records->{_root};
-    $ls_root =~ s/\/$//;
-
-    foreach (keys %$ls_records) {
-      # forbid keys beginning with '_'
-      unless (m/^_/) {
-        print $_, ' ';
-        if ($ls_records->{$_} =~ m/^\//) {
-          say $ls_records->{$_};
-        }
-        else {
-          say $ls_root, '/', $ls_records->{$_};
-        }
-      }
-    }
+    say join("\n", @yaml_files);
   }
-  else {
-    if (defined $ls_records->{$ls_key}) {
-      if (defined $ls_records->{_root}) {
-        say catfile($ls_records->{_root}, $ls_records->{$ls_key});
-      }
-      else {
-        say $ls_records->{$ls_key};
+  elsif (-f $ls_file) {
+    my $ls_records = LoadFile($ls_file);
+    if ($ls_key eq '') {
+      # stuff is a yaml object which should be printed completely
+      # print keys alongside values
+      my $ls_root = $ENV{HOME};
+      $ls_root = $ls_records->{_root} if defined $ls_records->{_root};
+      $ls_root =~ s/\/$//;
+
+      foreach (keys %$ls_records) {
+        # forbid keys beginning with '_'
+        unless (m/^_/) {
+          print $_, ' ';
+          if ($ls_records->{$_} =~ m/^\//) {
+            say $ls_records->{$_};
+          }
+          else {
+            say $ls_root, '/', $ls_records->{$_};
+          }
+        }
       }
     }
     else {
-      _error('nothing to show');
+      if (defined $ls_records->{$ls_key}) {
+        if (defined $ls_records->{_root}) {
+          say catfile($ls_records->{_root}, $ls_records->{$ls_key});
+        }
+        else {
+          say $ls_records->{$ls_key};
+        }
+      }
+      else {
+        die('nothing to show');
+      }
     }
   }
 }
 
 # open a file with default editor
 sub open_stuff {
-  my ($os_file, $os_records, $os_key) = @_;
+  my ($os_settings, $os_file, $os_key) = @_;
+
+  my $os_records = LoadFile($os_file);
 
   if ($os_key eq '' && -f $os_file) {
-    exec "$EDITOR $os_file";
+    exec "$os_settings->{EDITOR} $os_file";
   }
   elsif ($os_key ne '' && defined $os_records->{$os_key}) {
     if (defined $os_records->{_root}) {
-      exec $EDITOR . ' ' . catfile(
+      exec $os_settings->{EDITOR} . ' ' . catfile(
           $os_records->{_root},
           $os_records->{$os_key}
       );
     }
     else {
-      exec "$EDITOR $os_records->{$os_key}";
+      exec "$os_settings->{EDITOR} $os_records->{$os_key}";
     }
   }
   else {
-    _error('nothing to open');
+    die('nothing to open');
   }
 }
 
 # main application logic
 sub Run {
+  # define default program settings
+  my $r_settings = {
+    CONFIG_FILE   => ($ENV{CONF_APP_RC} || catfile($ENV{HOME}, '.confrc')),
+    EDITOR        => ($ENV{EDITOR} || 'vim'),
+    RECORDS_DIR   => ($ENV{CONF_APP_RECORDS} || '.conf.d'),
+    IS_GLOBAL     => 1,
+    ALIAS_ENABLED => 1,
+    EXPR_ENABLED  => 0,
+    ALIASES       => {},
+    EXPRESSIONS   => {},
+  };
+
+  # setup subcommands and command-line options
   my $r_subcommands = {
     'go' => \&open_stuff,
     'ls' => \&list_stuff,
   };
 
-  my ($r_action, $r_ok) = get_subcommand($r_subcommands);
-  unless ($r_ok) {
-    die "expected global option or subcommand";
-  }
+  ## if finding a subcommand fails, $r_ok will equal 0
+  ## otherwise, $r_action will be the value of the subcommand
+  my $r_action = get_subcommand($r_subcommands);
 
-  GetOptions(%OPTS);
-
-  configure_app($CONFIG_FILE);
+  ## if GetOptions fails, it will print an error message without
+  ## dying and return a false value. this code ensures that
+  ## a failure in GetOptions terminates the program
+  exit 1 unless GetOptions(
+    'w|with-editor=s' => \$r_settings->{EDITOR},
+    'g|global'     => sub { $r_settings->{IS_GLOBAL} = 1; },
+    'l|local'      => sub { $r_settings->{IS_GLOBAL} = 0; },
+    'h|help'       => \&_help,
+    'v|version'    => \&_version,
+    'a|aliases'    => sub { $r_settings->{ALIAS_ENABLED} = 1; },
+    'A|no-aliases' => sub { $r_settings->{ALIAS_ENABLED} = 0; },
+    'e|exprs'      => sub { $r_settings->{EXPR_ENABLED} = 1; },
+    'E|no-exprs'   => sub { $r_settings->{EXPR_ENABLED} = 0; }
+  );
   
-  my ($r_path) = shift @ARGV || _error();
+  configure_app($r_settings);
+  
+  my ($r_file, $r_key) = process_path($r_settings, shift(@ARGV));
 
-  my ($r_file, $r_path_end) = process_path($r_path);
-
-  my $r_records = LoadFile($r_file);
-
-  if ($r_action eq 'go') {
-    open_stuff($r_file, $r_records, $r_path_end);
-  }
-  elsif ($r_action eq 'ls') {
-    list_stuff($r_records, $r_path_end);
-  }
+  # say "file: $r_file; key: $r_key"; #ASSERT
+  &{ $r_subcommands->{$r_action} }(
+    $r_settings,
+    $r_file,
+    $r_key
+  );
 }
 
 1;
