@@ -24,12 +24,12 @@ BEGIN {
   our @EXPORT    = qw/&Run/;
   our @EXPORT_OK = qw{
       &process_path &configure_app &eval_expr 
-      &eval_alias &get_subcommand &_pp_find_starting_point
+      &eval_alias &get_subcommand &List_Conf &Open_Conf
   };
   our %EXPORT_TAGS = (
     tests => qw{
       &Run &process_path &configure_app &eval_expr 
-      &eval_alias &get_subcommand &_pp_find_starting_point
+      &eval_alias &get_subcommand &List_Conf &Open_Conf
     }
   );
 }
@@ -200,7 +200,7 @@ sub process_path {
 }
 
 # lists the contents of files or items on stdout
-sub list_stuff {
+sub List_Conf {
   my ($ls_settings, $ls_file, $ls_key) = @_;
 
   # if file is a directory, list files in dir
@@ -249,7 +249,7 @@ sub list_stuff {
 }
 
 # open a file with default editor
-sub open_stuff {
+sub Open_Conf {
   my ($os_settings, $os_file, $os_key) = @_;
 
   my $os_records = LoadFile($os_file);
@@ -289,8 +289,8 @@ sub Run {
 
   # setup subcommands and command-line options
   my $r_subcommands = {
-    'go' => \&open_stuff,
-    'ls' => \&list_stuff,
+    'go' => \&Open_Conf,
+    'ls' => \&List_Conf,
   };
 
   ## if finding a subcommand fails, $r_ok will equal 0
