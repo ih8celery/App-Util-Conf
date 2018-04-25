@@ -27,10 +27,10 @@ BEGIN {
       &eval_alias &get_subcommand &List_Conf &Open_Conf
   };
   our %EXPORT_TAGS = (
-    tests => qw{
+    tests => [qw{
       &Run &process_path &configure_app &eval_expr 
       &eval_alias &get_subcommand &List_Conf &Open_Conf
-    }
+    }],
   );
 }
 
@@ -194,8 +194,12 @@ sub process_path {
         }
       }
     }
-
-    die('error: no file to read (perhaps you should write one?)');
+    elsif ($i == $pp_num_parts - 1) {
+      return ($pp_file, $pp_parts[$i]);
+    }
+    else {
+      die('error: no file to read (perhaps you should write one?)');
+    }
   }
 }
 
@@ -205,6 +209,8 @@ sub List_Conf {
 
   # if file is a directory, list files in dir
   if (-d $ls_file) {
+    die "error: List_Conf: $ls_key is not a file" unless $ls_key eq '';
+
     # glob files with yml extension
     my @yaml_files = glob "$ls_file/*.yml";
 
@@ -252,6 +258,8 @@ sub List_Conf {
 sub Open_Conf {
   my ($os_settings, $os_file, $os_key) = @_;
 
+  die "error: Open_Conf: $os_file is a directory" if -d $os_file;
+
   my $os_records = LoadFile($os_file);
 
   if ($os_key eq '' && -f $os_file) {
@@ -269,8 +277,41 @@ sub Open_Conf {
     }
   }
   else {
-    die('nothing to open');
+    die('error: Open_Conf: nothing to open');
   }
+}
+
+# create a new config file listing
+sub Init_Conf {
+  my ($ic_settings, $ic_dir, $ic_key) = @_;
+
+  # need dir and non-empty key string
+  unless (-d $ic_dir) {
+    die "error: Init_Conf: $ic_dir must be a directory";
+  }
+
+  if ($ic_key eq '') {
+    die "error: Init_Conf: key cannot be the empty string";
+  }
+
+  # construct file path
+  my $ic_path = catfile($ic_dir, "$ic_key.yml");
+
+  # create file named $key.yml or open it if it exists
+  unless (-f $ic_path) {
+    open my $ic_fh, '>', $ic_path;
+
+    say $ic_fh "# the _root is the directory in which your config files";
+    say $ic_fh "# can be found. it is Not mandatory that you use it.";
+    say $ic_fh "_root: $ENV{HOME}";
+    say $ic_fh "# below is a config named basic located at";
+    say $ic_fh "# ", catfile($ENV{HOME}, 'basic.conf');
+    say $ic_fh "basic: basic.conf";
+
+    close $ic_fh;
+  }
+
+  exec "$ic_settings->{EDITOR} $ic_path";
 }
 
 # main application logic
@@ -289,8 +330,9 @@ sub Run {
 
   # setup subcommands and command-line options
   my $r_subcommands = {
-    'go' => \&Open_Conf,
-    'ls' => \&List_Conf,
+    'go'   => \&Open_Conf,
+    'ls'   => \&List_Conf,
+    'init' => \&Init_Conf,
   };
 
   ## if finding a subcommand fails, $r_ok will equal 0
