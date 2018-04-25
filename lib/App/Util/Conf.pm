@@ -20,7 +20,7 @@ BEGIN {
   use Exporter;
 
   our @ISA    = qw/Exporter/;
-  our @EXPORT = qw(&run $EDITOR $IS_GLOBAL $ACTION $ALIAS_ENABLED
+  our @EXPORT = qw(&Run $EDITOR $IS_GLOBAL $ACTION $ALIAS_ENABLED
                     $ALIAS_DISABLED $CONFIG_FILE $RECORDS_DIR
                     &process_path &configure_app &eval_expr &eval_alias
                     &get_subcommand &_pp_find_starting_point
@@ -313,7 +313,7 @@ sub open_stuff {
 }
 
 # main application logic
-sub run {
+sub Run {
   get_subcommand();
   shift @ARGV;
 

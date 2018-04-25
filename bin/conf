@@ -5,4 +5,4 @@
 # brief: manipulate configuration files lazily
 
 use App::Util::Conf;
-run();
+Run();
