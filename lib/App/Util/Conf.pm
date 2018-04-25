@@ -142,7 +142,9 @@ sub _error {
 
 # try to find subcommand in argv
 sub get_subcommand {
+  my ($gs_subcommands) = @_;
   my $gs_num_args = scalar @ARGV;
+
   if ($gs_num_args == 0) {
     _help();  
   }
@@ -153,14 +155,11 @@ sub get_subcommand {
     elsif ($ARGV[0] eq '-v' || $ARGV[0] eq '--version') {
       _version();
     }
-    elsif ($ARGV[0] eq 'go') {
-      $ACTION = $Action::OPEN;
-    }
-    elsif ($ARGV[0] eq 'ls') {
-      $ACTION = $Action::LIST;
+    elsif (exists $gs_subcommands->{$ARGV[0]}) {
+      return (shift(@ARGV), 1);
     }
     else {
-      _error('expected global option or subcommand as first arg');
+      return ('', 0);
     }
   }
 }
@@ -301,8 +300,15 @@ sub open_stuff {
 
 # main application logic
 sub Run {
-  get_subcommand();
-  shift @ARGV;
+  my $r_subcommands = {
+    'go' => \&open_stuff,
+    'ls' => \&list_stuff,
+  };
+
+  my ($r_action, $r_ok) = get_subcommand($r_subcommands);
+  unless ($r_ok) {
+    die "expected global option or subcommand";
+  }
 
   GetOptions(%OPTS);
 
@@ -314,10 +320,10 @@ sub Run {
 
   my $r_records = LoadFile($r_file);
 
-  if ($ACTION == $Action::OPEN) {
+  if ($r_action eq 'go') {
     open_stuff($r_file, $r_records, $r_path_end);
   }
-  elsif ($ACTION == $Action::LIST) {
+  elsif ($r_action eq 'ls') {
     list_stuff($r_records, $r_path_end);
   }
 }
