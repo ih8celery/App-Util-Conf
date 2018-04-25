@@ -20,17 +20,11 @@ BEGIN {
   use Exporter;
 
   our @ISA    = qw/Exporter/;
-  our @EXPORT = qw(&run $EDITOR $LEVEL $ACTION $ALIAS_ENABLED
+  our @EXPORT = qw(&run $EDITOR $IS_GLOBAL $ACTION $ALIAS_ENABLED
                     $ALIAS_DISABLED $CONFIG_FILE $RECORDS_DIR
                     &process_path &configure_app &eval_expr &eval_alias
                     &get_subcommand &_pp_find_starting_point
                     &_join_filepaths);
-}
-
-package Level {
-  our $LOCAL  = 'local';
-  our $USER   = 'user';
-  our $SYSTEM = 'system';
 }
 
 package Action {
@@ -43,8 +37,8 @@ our $VERSION = '0.10';
 our $EDITOR  = $ENV{EDITOR} || 'vim';
 
 # general settings
-our $LEVEL  = $Level::USER;
-our $ACTION = $Action::OPEN;
+our $IS_GLOBAL = 1;
+our $ACTION    = $Action::OPEN;
 
 # special settings
 our $ALIAS_ENABLED = 0;
@@ -56,9 +50,8 @@ our $RECORDS_DIR   = $ENV{CONF_APP_RECORDS} || '.conf.d';
 # command-line options
 our %OPTS = (
   'w|with-editor=s' => \$EDITOR,
-  'S|system'     => sub { $LEVEL = $Level::SYSTEM },
-  'U|user'       => sub { $LEVEL = $Level::USER },
-  'L|local'      => sub { $LEVEL = $Level::LOCAL },
+  'g|global'     => sub { $IS_GLOBAL = 1; },
+  'l|local'      => sub { $IS_GLOBAL = 0; },
   'h|help'       => \&_help,
   'v|version'    => \&_version,
   'a|aliases'    => sub { $ALIAS_ENABLED = 1; },
@@ -177,7 +170,7 @@ sub get_subcommand {
 # along the way, evaluate aliases and expressions
 sub process_path {
   my ($pp_path) = @_;
-  my $pp_file = _pp_find_starting_point($LEVEL) || _error('no files');
+  my $pp_file = _pp_find_starting_point($IS_GLOBAL) || _error('no files');
   my @pp_parts = split /\./, $pp_path;
 
   # replace aliases to strings
@@ -232,14 +225,11 @@ sub process_path {
 
 # figure out where to start the search for the files with config info
 sub _pp_find_starting_point {
-  my ($locality) = @_;
+  my ($is_global) = @_;
 
   # return for now, do checks later TODO
-  if ($locality eq $Level::USER) {
+  if ($is_global) {
     return _join_filepaths($ENV{HOME}, $RECORDS_DIR, 'user');
-  }
-  elsif ($locality eq $Level::SYSTEM) {
-    return _join_filepaths($ENV{HOME}, $RECORDS_DIR, 'system');
   }
   else {
     return _join_filepaths(getcwd(), $RECORDS_DIR, 'local');
