@@ -33,7 +33,7 @@ package Action {
 }
 
 # module parameters
-our $VERSION = '0.10';
+our $VERSION = '0.010000';
 our $EDITOR  = $ENV{EDITOR} || 'vim';
 
 # general settings

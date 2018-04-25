@@ -18,7 +18,7 @@ my $build = Module::Build->new(
     'Test::More' => '>0.9',
     'YAML::XS'   => '0'
   },
-  dist_version   => '0.50',
+  dist_version   => '0.010000',
   dist_abstract  => 'META.yml'
 );
 
