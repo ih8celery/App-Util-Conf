@@ -314,10 +314,9 @@ sub Init_Conf {
   exec "$ic_settings->{EDITOR} $ic_path";
 }
 
-# main application logic
-sub Run {
+{
   # define default program settings
-  my $r_settings = {
+  my $SETTINGS = {
     CONFIG_FILE   => ($ENV{CONF_APP_RC} || catfile($ENV{HOME}, '.confrc')),
     EDITOR        => ($ENV{EDITOR} || 'vim'),
     RECORDS_DIR   => ($ENV{CONF_APP_RECORDS} || '.conf.d'),
@@ -328,42 +327,50 @@ sub Run {
     EXPRESSIONS   => {},
   };
 
-  # setup subcommands and command-line options
-  my $r_subcommands = {
-    'go'   => \&Open_Conf,
-    'ls'   => \&List_Conf,
-    'init' => \&Init_Conf,
-  };
+  # this is a bad idea. TODO BUG
+  sub get_settings {
+    return $SETTINGS;
+  }
 
-  ## if finding a subcommand fails, $r_ok will equal 0
-  ## otherwise, $r_action will be the value of the subcommand
-  my $r_action = get_subcommand($r_subcommands);
+  # main application logic
+  sub Run {
+    # setup subcommands and command-line options
+    my $r_subcommands = {
+      'go'   => \&Open_Conf,
+      'ls'   => \&List_Conf,
+      'init' => \&Init_Conf,
+    };
 
-  ## if GetOptions fails, it will print an error message without
-  ## dying and return a false value. this code ensures that
-  ## a failure in GetOptions terminates the program
-  exit 1 unless GetOptions(
-    'w|with-editor=s' => \$r_settings->{EDITOR},
-    'g|global'     => sub { $r_settings->{IS_GLOBAL} = 1; },
-    'l|local'      => sub { $r_settings->{IS_GLOBAL} = 0; },
-    'h|help'       => \&_help,
-    'v|version'    => \&_version,
-    'a|aliases'    => sub { $r_settings->{ALIAS_ENABLED} = 1; },
-    'A|no-aliases' => sub { $r_settings->{ALIAS_ENABLED} = 0; },
-    'e|exprs'      => sub { $r_settings->{EXPR_ENABLED} = 1; },
-    'E|no-exprs'   => sub { $r_settings->{EXPR_ENABLED} = 0; }
-  );
-  
-  configure_app($r_settings);
-  
-  my ($r_file, $r_key) = process_path($r_settings, shift(@ARGV));
+    ## if finding a subcommand fails, $r_ok will equal 0
+    ## otherwise, $r_action will be the value of the subcommand
+    my $r_action = get_subcommand($r_subcommands);
 
-  # say "file: $r_file; key: $r_key"; #ASSERT
-  &{ $r_subcommands->{$r_action} }(
-    $r_settings,
-    $r_file,
-    $r_key
-  );
+    ## if GetOptions fails, it will print an error message without
+    ## dying and return a false value. this code ensures that
+    ## a failure in GetOptions terminates the program
+    exit 1 unless GetOptions(
+      'w|with-editor=s' => \$SETTINGS->{EDITOR},
+      'g|global'     => sub { $SETTINGS->{IS_GLOBAL} = 1; },
+      'l|local'      => sub { $SETTINGS->{IS_GLOBAL} = 0; },
+      'h|help'       => \&_help,
+      'v|version'    => \&_version,
+      'a|aliases'    => sub { $SETTINGS->{ALIAS_ENABLED} = 1; },
+      'A|no-aliases' => sub { $SETTINGS->{ALIAS_ENABLED} = 0; },
+      'e|exprs'      => sub { $SETTINGS->{EXPR_ENABLED} = 1; },
+      'E|no-exprs'   => sub { $SETTINGS->{EXPR_ENABLED} = 0; }
+    );
+    
+    configure_app($SETTINGS);
+    
+    my ($r_file, $r_key) = process_path($SETTINGS, shift(@ARGV));
+
+    # say "file: $r_file; key: $r_key"; #ASSERT
+    &{ $r_subcommands->{$r_action} }(
+      $SETTINGS,
+      $r_file,
+      $r_key
+    );
+  }
 }
 
 1;
