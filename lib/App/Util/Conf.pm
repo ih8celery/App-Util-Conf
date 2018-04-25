@@ -12,6 +12,7 @@ use warnings;
 
 use feature qw/say/;
 
+use File::Spec::Functions qw/catfile/;
 use Cwd qw/getcwd/;
 use Getopt::Long qw/:config no_ignore_case/;
 use YAML::XS qw/LoadFile DumpFile/;
@@ -23,8 +24,7 @@ BEGIN {
   our @EXPORT = qw(&Run $EDITOR $IS_GLOBAL $ACTION $ALIAS_ENABLED
                     $ALIAS_DISABLED $CONFIG_FILE $RECORDS_DIR
                     &process_path &configure_app &eval_expr &eval_alias
-                    &get_subcommand &_pp_find_starting_point
-                    &_join_filepaths);
+                    &get_subcommand &_pp_find_starting_point);
 }
 
 package Action {
@@ -43,8 +43,7 @@ our $ACTION    = $Action::OPEN;
 # special settings
 our $ALIAS_ENABLED = 0;
 our $EXPR_ENABLED  = 1;
-our $CONFIG_FILE   = $ENV{CONF_APP_RC}
-      || _join_filepaths($ENV{HOME}, '.confrc');
+our $CONFIG_FILE   = $ENV{CONF_APP_RC} || catfile($ENV{HOME}, '.confrc');
 our $RECORDS_DIR   = $ENV{CONF_APP_RECORDS} || '.conf.d';
 
 # command-line options
@@ -187,7 +186,7 @@ sub process_path {
   my $pp_temp_file = $pp_file;
   my $pp_num_parts = scalar @pp_parts;
   for (my $i = 0; $i < $pp_num_parts; ++$i) {
-    $pp_temp_file = _join_filepaths($pp_temp_file, $pp_parts[$i]);
+    $pp_temp_file = catfile($pp_temp_file, $pp_parts[$i]);
 
     if (-e $pp_temp_file) {
       $pp_file = $pp_temp_file;
@@ -229,23 +228,11 @@ sub _pp_find_starting_point {
 
   # return for now, do checks later TODO
   if ($is_global) {
-    return _join_filepaths($ENV{HOME}, $RECORDS_DIR, 'user');
+    return catfile($ENV{HOME}, $RECORDS_DIR, 'user');
   }
   else {
-    return _join_filepaths(getcwd(), $RECORDS_DIR, 'local');
+    return catfile(getcwd(), $RECORDS_DIR, 'local');
   }
-}
-
-# merge parts of path in a way appropriate to platform
-sub _join_filepaths {
-  my $out = $_[0] || _error('_join_filepaths: at least one arg required');
-
-  my $sep = '/';
-  for(my $i = 1; $i < scalar @_; $i++) {
-    $out .= $sep . $_[ $i ];
-  }
-
-  return $out;
 }
 
 # lists the contents of files or items on stdout
@@ -277,7 +264,7 @@ sub list_stuff {
   else {
     if (defined $ls_records->{$ls_key}) {
       if (defined $ls_records->{_root}) {
-        say _join_filepaths($ls_records->{_root}, $ls_records->{$ls_key});
+        say catfile($ls_records->{_root}, $ls_records->{$ls_key});
       }
       else {
         say $ls_records->{$ls_key};
@@ -298,7 +285,7 @@ sub open_stuff {
   }
   elsif ($os_key ne '' && defined $os_records->{$os_key}) {
     if (defined $os_records->{_root}) {
-      exec $EDITOR . ' ' . _join_filepaths(
+      exec $EDITOR . ' ' . catfile(
           $os_records->{_root},
           $os_records->{$os_key}
       );
