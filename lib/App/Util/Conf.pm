@@ -390,9 +390,8 @@ conf [subcommand] [options] [path]
 C<conf> helps you find and open your configuration files using a
 simple notation to identify them called a path and a description of
 your configuration setup in YAML that can be customized by you. C<conf>
-can distinguish between "local" files, "user" files located in
-the home directory, and "system" files. C<conf> uses YAML to
-remember where files are located. 
+can distinguish between "local" configuration listings in the current
+working directory, and "system-wide" listings found in the home directory.
 
 C<conf> uses three shell variables:
 
@@ -418,6 +417,24 @@ current working directory
 
 =back
 
+Note: before continuing, let's define terms:
+
+=over 4
+
+=item listing
+
+a listing is a YAML file that contains pairs of file names and paths.
+C<conf> reads listings to show you where configuration files are
+located or to open one of those files with an editor
+
+=item listing directory
+
+a directory containing listings. you can create as many of these as
+you want arbitrarily nested, so long as they are contained in the
+records directory, which is usually named '.conf.d'.
+
+=back
+
 =head1 Subcommands
 
 =over 4
@@ -432,7 +449,14 @@ path is "bash", "go" will open that file.
 
 =item ls
 
-show the contents of YAML file or item in YAML file
+show the contents of YAML file or item in YAML file; with no path,
+or a path that specifies a listing directory, this subcommand will list
+the names (without the '.yml' extension) of files in one of the
+listing directories.
+
+=item init
+
+create a new listing, either locally or globally
 
 =back
 
@@ -444,15 +468,11 @@ show the contents of YAML file or item in YAML file
 
 set the editor used to open files
 
-=item -S|--system
-
-use system files, if any
-
-=item -U|--user
+=item -g|--global
 
 use files in user's home, if any (B<default>)
 
-=item -L|--local
+=item -l|--local
 
 use files in current directory, if any
 
@@ -466,19 +486,19 @@ print version information
 
 =item -a|--aliases
 
-enable aliases
+enable aliases (B<default>)
 
 =item -A|--no-aliases
 
-disable aliases (default)
+disable aliases
 
 =item -e|--exprs
 
-enable expressions (default)
+enable expressions
 
 =item -E|--no-exprs
 
-disable expressions
+disable expressions (B<default>)
 
 =back
 
@@ -497,13 +517,8 @@ subroutine:
 
 =item 1. Locate Starting Point in File System
 
-based on whether the user has asked for "local", "system", or "user"
-files, a dedicated subroutine will search the current working directory
-and the home directory for a directory called ".conf.d" and a
-subdirectory called either "user", "local", or "system". if this
-directory is found, the full path to this directory is returned and
-the process moves on to step 2. otherwise, the subroutine throws an
-error.
+C<conf> will try the current directory if C<-l> was given as an argument.
+otherwise, it will look in the user's home directory.
 
 =item 2. Create Maximum Valid Filepath
 
@@ -532,7 +547,6 @@ aliases or expressions.
 assume the following file structure:
 
   ~/.conf.d/
-    user/
       shells/
         zsh
 
@@ -546,21 +560,21 @@ and that the file "zsh" looks like this:
 
 then, in the invocation
 
-  $ conf ls -U shells.zsh.alias
+  $ conf ls -g shells.zsh.alias
 
 "ls" is the subcommand and "shell.zsh.alias" is the path. "-U"
 indicates that we are expecting user configuration. in step 1
-above, therefore, C<process_path> will find the directory "~/.conf.d/user".
+above, therefore, C<process_path> will find the directory "~/.conf.d/".
 in step 2, C<process_path>  will try to find a file or directory called
-"~/.conf.d/user/shells". that is a directory, so it will move
-to "~/.conf.d/user/shells/zsh". this is a file, so it will move
-to "alias". C<process_path> will see that "~/.conf.d/user/shells/zsh/alias"
+"~/.conf.d/shells". that is a directory, so it will move
+to "~/.conf.d/shells/zsh". this is a file, so it will move
+to "alias". C<process_path> will see that "~/.conf.d/shells/zsh/alias"
 is not a file, so it will revert the filepath and advance to step
 3. in step 3, "alias" will be used as the key, so C<conf> will
-load the YAML file "~/.conf.d/user/shells/zsh" and print the value
+load the YAML file "~/.conf.d/shells/zsh" and print the value
 at the key "alias".
 
-  $ conf ls -U shells.zsh.alias
+  $ conf ls -g shells.zsh.alias
   ~/.zsh_alias
 
 =head1 YAML Configuration Listings
@@ -568,7 +582,7 @@ at the key "alias".
 here is a sample file that describes an nvim config:
 
   ---
-  _root: /home/body/.config/nvim
+  _root: /home/boy/.config/nvim
   init: init.vim
   plug: plugins.vim
   binds: bindings.vim
@@ -581,7 +595,7 @@ the value of init with
   $ conf ls nvim.init
 
 the value of _root will be concatenated with the value of init,
-using the correct separator:
+using the correct separator for Windows and *nix platforms:
 
   /home/adamu/.config/nvim/init.vim
 
@@ -653,10 +667,10 @@ ignored.
 name of the program to use by default to open files if your subcommand
 is "go".
 
-=item * LEVEL
+=item * IS_GLOBAL
 
-name of the "level" to use when searching for files. default value
-"user". possible values are "user", "local", and "system".
+boolean. default value 1. set to 0 to force C<conf> to look in the
+current working directory rather than the home directory.
 
 =back
 
@@ -664,7 +678,7 @@ name of the "level" to use when searching for files. default value
 
 =head1 Examples
 
- $ conf ls -U bash
+ $ conf ls -g bash
 
 lists the bash configuration files in your home directory
 
