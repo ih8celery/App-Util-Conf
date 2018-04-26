@@ -12,6 +12,7 @@ use warnings;
 
 use feature qw/say/;
 
+use File::Basename qw/basename/;
 use File::Spec::Functions qw/catfile/;
 use Cwd qw/getcwd/;
 use Getopt::Long qw/:config no_ignore_case/;
@@ -213,6 +214,7 @@ sub List_Conf {
 
     # glob files with yml extension
     my @yaml_files = glob "$ls_file/*.yml";
+    @yaml_files = map { $_ =~ s/(.+?)\.yml/$1/; basename $_; } @yaml_files;
 
     say join("\n", @yaml_files);
   }
