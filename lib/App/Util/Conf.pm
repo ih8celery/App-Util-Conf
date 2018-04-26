@@ -36,7 +36,7 @@ BEGIN {
 }
 
 # module parameters
-our $VERSION = '0.010000';
+our $VERSION = '0.011000';
 
 # print help message and exit
 sub _help {
